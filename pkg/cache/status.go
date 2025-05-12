@@ -59,9 +59,6 @@ type statusInfo struct {
 	// node is the constant Envoy node metadata.
 	node *core.Node
 
-	// watches are indexed channels for the response watches and the original requests.
-	orderedWatches keys
-
 	// deltaWatches are indexed channels for the delta response watches and the original requests
 	deltaWatches        map[int64]DeltaResponseWatch
 	orderedDeltaWatches keys
@@ -89,9 +86,8 @@ type DeltaResponseWatch struct {
 // newStatusInfo initializes a status info data structure.
 func newStatusInfo(node *core.Node) *statusInfo {
 	out := statusInfo{
-		node:           node,
-		orderedWatches: make(keys, 0),
-		deltaWatches:   make(map[int64]DeltaResponseWatch),
+		node:         node,
+		deltaWatches: make(map[int64]DeltaResponseWatch),
 	}
 	return &out
 }

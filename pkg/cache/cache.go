@@ -32,18 +32,14 @@ import (
 // DeltaRequest is an alias for the delta discovery request type.
 type DeltaRequest = discovery.DeltaDiscoveryRequest
 
-// ConfigWatcher requests watches for configuration resources by a node, last
-// applied version identifier, and resource names hint. The watch should send
-// the responses when they are ready. The watch can be canceled by the
-// consumer, in effect terminating the watch for the request.
-// ConfigWatcher implementation must be thread-safe.
-type ConfigWatcher interface {
-	CreateDeltaWatch(*DeltaRequest, stream.StreamState, chan DeltaResponse) (cancel func())
-}
-
 // Cache is a generic config cache with a watcher.
-type Cache interface {
-	ConfigWatcher
+type ConfigWatcher interface {
+	// ConfigWatcher requests watches for configuration resources by a node, last
+	// applied version identifier, and resource names hint. The watch should send
+	// the responses when they are ready. The watch can be canceled by the
+	// consumer, in effect terminating the watch for the request.
+	// ConfigWatcher implementation must be thread-safe.
+	CreateDeltaWatch(*DeltaRequest, stream.StreamState, chan DeltaResponse) (cancel func())
 }
 
 // DeltaResponse is a wrapper around Envoy's DeltaDiscoveryResponse

@@ -36,16 +36,10 @@ type Callbacks interface {
 
 // CallbackFuncs is a convenience type for implementing the Callbacks interface.
 type CallbackFuncs struct {
-	StreamOpenFunc          func(context.Context, int64, string) error
-	StreamClosedFunc        func(int64, *core.Node)
 	DeltaStreamOpenFunc     func(context.Context, int64, string) error
 	DeltaStreamClosedFunc   func(int64, *core.Node)
-	StreamRequestFunc       func(int64, *discovery.DiscoveryRequest) error
-	StreamResponseFunc      func(context.Context, int64, *discovery.DiscoveryRequest, *discovery.DiscoveryResponse)
 	StreamDeltaRequestFunc  func(int64, *discovery.DeltaDiscoveryRequest) error
 	StreamDeltaResponseFunc func(int64, *discovery.DeltaDiscoveryRequest, *discovery.DeltaDiscoveryResponse)
-	FetchRequestFunc        func(context.Context, *discovery.DiscoveryRequest) error
-	FetchResponseFunc       func(*discovery.DiscoveryRequest, *discovery.DiscoveryResponse)
 }
 
 var _ Callbacks = CallbackFuncs{}
@@ -83,7 +77,7 @@ func (c CallbackFuncs) OnStreamDeltaResponse(streamID int64, req *discovery.Delt
 }
 
 // NewServer creates handlers from a config watcher and callbacks.
-func NewServer(ctx context.Context, config cache.Cache, callbacks Callbacks, opts ...config.XDSOption) Server {
+func NewServer(ctx context.Context, config cache.ConfigWatcher, callbacks Callbacks, opts ...config.XDSOption) Server {
 	return NewServerAdvanced(delta.NewServer(ctx, config, callbacks, opts...))
 }
 

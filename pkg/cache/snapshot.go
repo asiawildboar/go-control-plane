@@ -40,7 +40,6 @@ var _ ResourceSnapshot = &Snapshot{}
 // NewSnapshot creates a snapshot from response types and a version.
 // The resources map is keyed off the type URL of a resource, followed by the slice of resource objects.
 func NewSnapshot(version string, resources map[resource.Type][]types.Resource) (*Snapshot, error) {
-	fmt.Println("pog Newsnapshot")
 	out := Snapshot{}
 
 	for typ, resource := range resources {
@@ -70,55 +69,6 @@ func NewSnapshotWithTTLs(version string, resources map[resource.Type][]types.Res
 	}
 
 	return &out, nil
-}
-
-// Consistent check verifies that the dependent resources are exactly listed in the
-// snapshot:
-// - all EDS resources are listed by name in CDS resources
-// - all SRDS/RDS resources are listed by name in LDS resources
-// - all RDS resources are listed by name in SRDS resources
-//
-// Note that clusters and listeners are requested without name references, so
-// Envoy will accept the snapshot list of clusters as-is even if it does not match
-// all references found in xDS.
-func (s *Snapshot) Consistent() error {
-	if s == nil {
-		return errors.New("nil snapshot")
-	}
-
-	referencedResources := GetAllResourceReferences(s.Resources)
-
-	// Loop through each referenced resource.
-	referencedResponseTypes := map[types.ResponseType]struct{}{
-		types.Endpoint: {},
-		types.Route:    {},
-	}
-
-	for idx, items := range s.Resources {
-		// We only want to check resource types that are expected to be referenced by another resource type.
-		// Basically, if the consistency relationship is modeled as a DAG, we only want
-		// to check nodes that are expected to have edges pointing to it.
-		responseType := types.ResponseType(idx)
-		if _, ok := referencedResponseTypes[responseType]; ok {
-			typeURL, err := GetResponseTypeURL(responseType)
-			if err != nil {
-				return err
-			}
-			referenceSet := referencedResources[typeURL]
-
-			if len(referenceSet) != len(items.Items) {
-				return fmt.Errorf("mismatched %q reference and resource lengths: len(%v) != %d",
-					typeURL, referenceSet, len(items.Items))
-			}
-
-			// Check superset.
-			if err := superset(referenceSet, items.Items); err != nil {
-				return fmt.Errorf("inconsistent %q reference: %w", typeURL, err)
-			}
-		}
-	}
-
-	return nil
 }
 
 // GetResources selects snapshot resources by type, returning the map of resources.

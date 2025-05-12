@@ -38,8 +38,8 @@ type Callbacks interface {
 var deltaErrorResponse = &cache.RawDeltaResponse{}
 
 type server struct {
-	cache     cache.ConfigWatcher
-	callbacks Callbacks
+	configWatcher cache.ConfigWatcher
+	callbacks     Callbacks
 
 	// total stream count for counting bi-di streams
 	streamCount int64
@@ -50,11 +50,11 @@ type server struct {
 }
 
 // NewServer creates a delta xDS specific server which utilizes a ConfigWatcher and delta Callbacks.
-func NewServer(ctx context.Context, config cache.ConfigWatcher, callbacks Callbacks, opts ...config.XDSOption) Server {
+func NewServer(ctx context.Context, cw cache.ConfigWatcher, callbacks Callbacks, opts ...config.XDSOption) Server {
 	s := &server{
-		cache:     config,
-		callbacks: callbacks,
-		ctx:       ctx,
+		configWatcher: cw,
+		callbacks:     callbacks,
+		ctx:           ctx,
 	}
 
 	// Parse through our options
@@ -215,10 +215,10 @@ func (s *server) processDelta(str stream.DeltaStream, reqCh <-chan *discovery.De
 				watch.Cancel()
 			}
 
-			s.subscribe(req.GetResourceNamesSubscribe(), &watch.state)
-			s.unsubscribe(req.GetResourceNamesUnsubscribe(), &watch.state)
+			subscribe(req.GetResourceNamesSubscribe(), &watch.state)
+			unsubscribe(req.GetResourceNamesUnsubscribe(), &watch.state)
 
-			watch.cancel = s.cache.CreateDeltaWatch(req, watch.state, watches.deltaMuxedResponses)
+			watch.cancel = s.configWatcher.CreateDeltaWatch(req, watch.state, watches.deltaMuxedResponses)
 			watches.deltaWatches[typeURL] = watch
 		}
 	}
@@ -250,7 +250,7 @@ func (s *server) DeltaStreamHandler(str stream.DeltaStream, typeURL string) erro
 
 // When we subscribe, we just want to make the cache know we are subscribing to a resource.
 // Even if the stream is wildcard, we keep the list of explicitly subscribed resources as the wildcard subscription can be discarded later on.
-func (s *server) subscribe(resources []string, streamState *stream.StreamState) {
+func subscribe(resources []string, streamState *stream.StreamState) {
 	sv := streamState.GetSubscribedResourceNames()
 	for _, resource := range resources {
 		if resource == "*" {
@@ -263,7 +263,7 @@ func (s *server) subscribe(resources []string, streamState *stream.StreamState) 
 
 // Unsubscriptions remove resources from the stream's subscribed resource list.
 // If a client explicitly unsubscribes from a wildcard request, the stream is updated and now watches only subscribed resources.
-func (s *server) unsubscribe(resources []string, streamState *stream.StreamState) {
+func unsubscribe(resources []string, streamState *stream.StreamState) {
 	sv := streamState.GetSubscribedResourceNames()
 	for _, resource := range resources {
 		if resource == "*" {

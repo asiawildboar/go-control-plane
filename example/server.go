@@ -40,7 +40,7 @@ type Server struct {
 	xdsserver server.Server
 }
 
-func NewServer(ctx context.Context, cache cache.Cache, cb *Callbacks) *Server {
+func NewServer(ctx context.Context, cache cache.ConfigWatcher, cb *Callbacks) *Server {
 	srv := server.NewServer(ctx, cache, cb)
 	return &Server{srv}
 }

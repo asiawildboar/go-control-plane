@@ -67,7 +67,7 @@ type ResourceSnapshot interface {
 // SnapshotCache can operate as a REST or regular xDS backend. The snapshot
 // can be partial, e.g. only include RDS or EDS resources.
 type SnapshotCache interface {
-	Cache
+	ConfigWatcher
 
 	// SetSnapshot sets a response snapshot for a node. For ADS, the snapshots
 	// should have distinct versions and be internally consistent (e.g. all
@@ -221,27 +221,8 @@ func (cache *snapshotCache) ClearSnapshot(node string) {
 	delete(cache.status, node)
 }
 
-// nameSet creates a map from a string slice to value true.
-func nameSet(names []string) map[string]bool {
-	set := make(map[string]bool, len(names))
-	for _, name := range names {
-		set[name] = true
-	}
-	return set
-}
-
-// superset checks that all resources are listed in the names set.
-func superset(names map[string]bool, resources map[string]types.ResourceWithTTL) error {
-	for resourceName := range resources {
-		if _, exists := names[resourceName]; !exists {
-			return fmt.Errorf("%q not listed", resourceName)
-		}
-	}
-	return nil
-}
-
 // CreateDeltaWatch returns a watch for a delta xDS request which implements the Simple SnapshotCache.
-func (cache *snapshotCache) CreateDeltaWatch(request *DeltaRequest, state stream.StreamState, value chan DeltaResponse) func() {
+func (cache *snapshotCache) CreateDeltaWatch(request *DeltaRequest, state stream.StreamState, deltaRespCh chan DeltaResponse) func() {
 	nodeID := cache.hash.ID(request.GetNode())
 	t := request.GetTypeUrl()
 
@@ -270,7 +251,7 @@ func (cache *snapshotCache) CreateDeltaWatch(request *DeltaRequest, state stream
 		if err != nil {
 			cache.log.Errorf("failed to compute version for snapshot resources inline: %s", err)
 		}
-		response, err := cache.respondDelta(context.Background(), snapshot, request, value, state)
+		response, err := cache.respondDelta(context.Background(), snapshot, request, deltaRespCh, state)
 		if err != nil {
 			cache.log.Errorf("failed to respond with delta response: %s", err)
 		}
@@ -287,7 +268,7 @@ func (cache *snapshotCache) CreateDeltaWatch(request *DeltaRequest, state stream
 			cache.log.Infof("open delta watch ID:%d for %s Resources:%v from nodeID: %q", watchID, t, state.GetSubscribedResourceNames(), nodeID)
 		}
 
-		info.setDeltaResponseWatch(watchID, DeltaResponseWatch{Request: request, Response: value, StreamState: state})
+		info.setDeltaResponseWatch(watchID, DeltaResponseWatch{Request: request, Response: deltaRespCh, StreamState: state})
 		return cache.cancelDeltaWatch(nodeID, watchID)
 	}
 

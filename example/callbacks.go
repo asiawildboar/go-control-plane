@@ -13,7 +13,6 @@ import (
 type Callbacks struct {
 	Signal         chan struct{}
 	Debug          bool
-	Fetches        int
 	DeltaRequests  int
 	DeltaResponses int
 	mu             sync.Mutex
