@@ -33,18 +33,6 @@ const (
 	AnyType = ""
 )
 
-// Fetch urls in xDS v3.
-const (
-	FetchEndpoints        = "/v3/discovery:endpoints"
-	FetchClusters         = "/v3/discovery:clusters"
-	FetchListeners        = "/v3/discovery:listeners"
-	FetchRoutes           = "/v3/discovery:routes"
-	FetchScopedRoutes     = "/v3/discovery:scoped-routes"
-	FetchSecrets          = "/v3/discovery:secrets" //nolint:gosec
-	FetchRuntimes         = "/v3/discovery:runtime"
-	FetchExtensionConfigs = "/v3/discovery:extension_configs"
-)
-
 // DefaultAPIVersion is the api version
 const DefaultAPIVersion = core.ApiVersion_V3
 

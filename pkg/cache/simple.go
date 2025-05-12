@@ -99,9 +99,6 @@ type snapshotCache struct {
 
 	log log.Logger
 
-	// ads flag to hold responses until all resources are named
-	ads bool
-
 	// snapshots are cached resources indexed by node IDs
 	snapshots map[string]ResourceSnapshot
 
@@ -136,7 +133,6 @@ func newSnapshotCache(ads bool, hash NodeHash, logger log.Logger) *snapshotCache
 
 	cache := &snapshotCache{
 		log:       logger,
-		ads:       ads,
 		snapshots: make(map[string]ResourceSnapshot),
 		status:    make(map[string]*statusInfo),
 		hash:      hash,
@@ -181,45 +177,26 @@ func (cache *snapshotCache) respondDeltaWatches(ctx context.Context, info *statu
 	// If ADS is enabled we need to order response delta watches so we guarantee
 	// sending them in the correct order. Go's default implementation
 	// of maps are randomized order when ranged over.
-	if cache.ads {
-		info.orderResponseDeltaWatches()
-		for _, key := range info.orderedDeltaWatches {
-			watch := info.deltaWatches[key.ID]
-			res, err := cache.respondDelta(
-				ctx,
-				snapshot,
-				watch.Request,
-				watch.Response,
-				watch.StreamState,
-			)
-			if err != nil {
-				return err
-			}
-			// If we detect a nil response here, that means there has been no state change
-			// so we don't want to respond or remove any existing resource watches
-			if res != nil {
-				delete(info.deltaWatches, key.ID)
-			}
+	info.orderResponseDeltaWatches()
+	for _, key := range info.orderedDeltaWatches {
+		watch := info.deltaWatches[key.ID]
+		res, err := cache.respondDelta(
+			ctx,
+			snapshot,
+			watch.Request,
+			watch.Response,
+			watch.StreamState,
+		)
+		if err != nil {
+			return err
 		}
-	} else {
-		for id, watch := range info.deltaWatches {
-			res, err := cache.respondDelta(
-				ctx,
-				snapshot,
-				watch.Request,
-				watch.Response,
-				watch.StreamState,
-			)
-			if err != nil {
-				return err
-			}
-			// If we detect a nil response here, that means there has been no state change
-			// so we don't want to respond or remove any existing resource watches
-			if res != nil {
-				delete(info.deltaWatches, id)
-			}
+		// If we detect a nil response here, that means there has been no state change
+		// so we don't want to respond or remove any existing resource watches
+		if res != nil {
+			delete(info.deltaWatches, key.ID)
 		}
 	}
+
 	return nil
 }
 

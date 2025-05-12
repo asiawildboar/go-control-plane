@@ -6,12 +6,10 @@ toolchain go1.23.6
 
 replace (
 	github.com/envoyproxy/go-control-plane/envoy => ./envoy
-	github.com/envoyproxy/go-control-plane/ratelimit => ./ratelimit
 )
 
 require (
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4
-	github.com/envoyproxy/go-control-plane/ratelimit v0.1.0
 	google.golang.org/grpc v1.72.0
 	google.golang.org/protobuf v1.36.6
 )
