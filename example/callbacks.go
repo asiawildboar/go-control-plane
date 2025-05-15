@@ -34,12 +34,14 @@ func (cb *Callbacks) OnDeltaStreamClosed(id int64, node *core.Node) {
 }
 
 func (cb *Callbacks) OnStreamDeltaResponse(id int64, req *discovery.DeltaDiscoveryRequest, res *discovery.DeltaDiscoveryResponse) {
+	log.Println("OnStreamDeltaResponse pog", res.String())
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.DeltaResponses++
 }
 
-func (cb *Callbacks) OnStreamDeltaRequest(int64, *discovery.DeltaDiscoveryRequest) error {
+func (cb *Callbacks) OnStreamDeltaRequest(id int64, req *discovery.DeltaDiscoveryRequest) error {
+	log.Println("OnStreamDeltaRequest pog", req.String())
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.DeltaRequests++

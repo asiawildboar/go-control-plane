@@ -23,7 +23,7 @@ import (
 
 	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	"github.com/envoyproxy/go-control-plane/pkg/log"
-	"github.com/envoyproxy/go-control-plane/pkg/server/stream"
+	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 )
 
 // ResourceSnapshot is an abstract snapshot of a collection of resources that
@@ -222,7 +222,7 @@ func (cache *snapshotCache) ClearSnapshot(node string) {
 }
 
 // CreateDeltaWatch returns a watch for a delta xDS request which implements the Simple SnapshotCache.
-func (cache *snapshotCache) CreateDeltaWatch(request *DeltaRequest, state stream.StreamState, deltaRespCh chan DeltaResponse) func() {
+func (cache *snapshotCache) CreateDeltaWatch(request *DeltaRequest, state xdsservertypes.StreamState, deltaRespCh chan DeltaResponse) func() {
 	nodeID := cache.hash.ID(request.GetNode())
 	t := request.GetTypeUrl()
 
@@ -247,6 +247,7 @@ func (cache *snapshotCache) CreateDeltaWatch(request *DeltaRequest, state stream
 	// - we attempted to issue a response, but the caller is already up to date
 	delayedResponse := !exists
 	if exists {
+		// 如果snapshot已存在
 		err := snapshot.ConstructVersionMap()
 		if err != nil {
 			cache.log.Errorf("failed to compute version for snapshot resources inline: %s", err)
@@ -255,10 +256,11 @@ func (cache *snapshotCache) CreateDeltaWatch(request *DeltaRequest, state stream
 		if err != nil {
 			cache.log.Errorf("failed to respond with delta response: %s", err)
 		}
-
 		delayedResponse = response == nil
 	}
 
+	// 1. snapshot does not exist
+	// 2. snapshot exists，但是没有新的资源
 	if delayedResponse {
 		watchID := cache.nextDeltaWatchID()
 
@@ -276,7 +278,7 @@ func (cache *snapshotCache) CreateDeltaWatch(request *DeltaRequest, state stream
 }
 
 // Respond to a delta watch with the provided snapshot value. If the response is nil, there has been no state change.
-func (cache *snapshotCache) respondDelta(ctx context.Context, snapshot ResourceSnapshot, request *DeltaRequest, value chan DeltaResponse, state stream.StreamState) (*RawDeltaResponse, error) {
+func (cache *snapshotCache) respondDelta(ctx context.Context, snapshot ResourceSnapshot, request *DeltaRequest, value chan DeltaResponse, state xdsservertypes.StreamState) (*RawDeltaResponse, error) {
 	resp := createDeltaResponse(ctx, request, state, resourceContainer{
 		resourceMap:   snapshot.GetResources(request.GetTypeUrl()),
 		versionMap:    snapshot.GetVersionMap(request.GetTypeUrl()),

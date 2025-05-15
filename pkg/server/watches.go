@@ -1,9 +1,9 @@
-package delta
+package server
 
 import (
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
 	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
-	"github.com/envoyproxy/go-control-plane/pkg/server/stream"
+	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 )
 
 // watches for all delta xDS resource types
@@ -41,7 +41,7 @@ type watch struct {
 	cancel func()
 	nonce  string
 
-	state stream.StreamState
+	state xdsservertypes.StreamState
 }
 
 // Cancel calls terminate and cancel
@@ -49,4 +49,9 @@ func (w *watch) Cancel() {
 	if w.cancel != nil {
 		w.cancel()
 	}
+}
+
+type streamData struct {
+	// Opaque resources share a muxed channel
+	responseCh chan cache.DeltaResponse
 }

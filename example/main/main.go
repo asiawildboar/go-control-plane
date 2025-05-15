@@ -18,6 +18,7 @@ import (
 	"context"
 	"flag"
 	"os"
+	"time"
 
 	"github.com/envoyproxy/go-control-plane/example"
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
@@ -28,6 +29,8 @@ var (
 	l      example.Logger
 	port   uint
 	nodeID string
+
+	debugMsg = 1
 )
 
 func init() {
@@ -42,25 +45,43 @@ func init() {
 	flag.StringVar(&nodeID, "nodeID", "test-id", "Node ID")
 }
 
+func setSnapshot(c cache.SnapshotCache) {
+	// Create the snapshot that we'll serve to Envoy
+	snapshot := example.GenerateSnapshot(debugMsg)
+	l.Debugf("will serve snapshot %+v %d", snapshot, debugMsg)
+	debugMsg++
+	// Add the snapshot to the cache
+	if err := c.SetSnapshot(context.Background(), nodeID, snapshot); err != nil {
+		l.Errorf("snapshot error %q for %+v", err, snapshot)
+		os.Exit(1)
+	}
+}
+
+func SetSnapshotEvery1Minute(c cache.SnapshotCache) (bool, error) {
+	setSnapshot(c)
+
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	done := make(chan bool)
+	for {
+		select {
+		case <-ticker.C:
+			setSnapshot(c)
+		case <-done:
+		}
+	}
+}
+
 func main() {
 	flag.Parse()
 
 	// Create a cache
 	cache := cache.NewSnapshotCache(false, cache.IDHash{}, l)
-
-	// Create the snapshot that we'll serve to Envoy
-	snapshot := example.GenerateSnapshot()
-	l.Debugf("will serve snapshot %+v", snapshot)
-
-	// Add the snapshot to the cache
-	if err := cache.SetSnapshot(context.Background(), nodeID, snapshot); err != nil {
-		l.Errorf("snapshot error %q for %+v", err, snapshot)
-		os.Exit(1)
-	}
+	go SetSnapshotEvery1Minute(cache)
 
 	// Run the xDS server
 	ctx := context.Background()
 	cb := &example.Callbacks{Debug: l.Debug}
-	srv := server.NewServer(ctx, cache, cb)
+	srv := server.NewXDSServer(ctx, cache, cb)
 	example.RunServer(srv, port)
 }

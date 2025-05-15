@@ -75,10 +75,10 @@ func makeEndpoint(clusterName string) *endpoint.ClusterLoadAssignment {
 	}
 }
 
-func makeTCPListener(listenerName string) *listener.Listener {
+func makeTCPListener(listenerName string, clusterName string) *listener.Listener {
 	filter := &tcp.TcpProxy{
 		ClusterSpecifier: &tcp.TcpProxy_Cluster{
-			Cluster: ClusterName,
+			Cluster: clusterName,
 		},
 		StatPrefix: "tcp_passthrough",
 	}
@@ -111,11 +111,12 @@ func makeTCPListener(listenerName string) *listener.Listener {
 	}
 }
 
-func GenerateSnapshot() *cache.Snapshot {
+func GenerateSnapshot(debug int) *cache.Snapshot {
+	clusterName := ClusterName + "_debug_" + fmt.Sprint(debug)
 	snap, _ := cache.NewSnapshot("1",
 		map[resource.Type][]types.Resource{
-			resource.ClusterType:  {makeCluster(ClusterName)},
-			resource.ListenerType: {makeTCPListener(ListenerName)},
+			// resource.ClusterType: {makeCluster(clusterName)},
+			resource.ListenerType: {makeTCPListener(ListenerName, clusterName)},
 		},
 	)
 	fmt.Print("pog GenerateSnapshot: Snapshot: ", snap)

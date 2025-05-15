@@ -7,8 +7,7 @@ import (
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
 	"github.com/envoyproxy/go-control-plane/pkg/resource"
 	"github.com/envoyproxy/go-control-plane/pkg/server/config"
-	"github.com/envoyproxy/go-control-plane/pkg/server/delta"
-	"github.com/envoyproxy/go-control-plane/pkg/server/stream"
+	"google.golang.org/grpc"
 
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	clusterservice "github.com/envoyproxy/go-control-plane/envoy/service/cluster/v3"
@@ -22,117 +21,86 @@ import (
 )
 
 // Server is a collection of handlers for streaming discovery requests.
-type Server interface {
+type XDSServer interface {
 	discovery.AggregatedDiscoveryServiceServer
-
-	delta.Server
 }
 
 // Callbacks is a collection of callbacks inserted into the server operation.
 // The callbacks are invoked synchronously.
 type Callbacks interface {
-	delta.Callbacks
+	// OnDeltaStreamOpen is called once an incremental xDS stream is open with a stream ID and the type URL (or "" for ADS).
+	// Returning an error will end processing and close the stream. OnStreamClosed will still be called.
+	OnDeltaStreamOpen(context.Context, int64, string) error
+	// OnDeltaStreamClosed is called immediately prior to closing an xDS stream with a stream ID.
+	OnDeltaStreamClosed(int64, *core.Node)
+	// OnStreamDeltaRequest is called once a request is received on a stream.
+	// Returning an error will end processing and close the stream. OnStreamClosed will still be called.
+	OnStreamDeltaRequest(int64, *discovery.DeltaDiscoveryRequest) error
+	// OnStreamDeltaResponse is called immediately prior to sending a response on a stream.
+	OnStreamDeltaResponse(int64, *discovery.DeltaDiscoveryRequest, *discovery.DeltaDiscoveryResponse)
 }
 
-// CallbackFuncs is a convenience type for implementing the Callbacks interface.
-type CallbackFuncs struct {
-	DeltaStreamOpenFunc     func(context.Context, int64, string) error
-	DeltaStreamClosedFunc   func(int64, *core.Node)
-	StreamDeltaRequestFunc  func(int64, *discovery.DeltaDiscoveryRequest) error
-	StreamDeltaResponseFunc func(int64, *discovery.DeltaDiscoveryRequest, *discovery.DeltaDiscoveryResponse)
+type serverImpl struct {
+	delta *streamHandler
 }
 
-var _ Callbacks = CallbackFuncs{}
+// Generic RPC Stream for the delta based xDS protocol.
+type DeltaStream interface {
+	grpc.ServerStream
 
-// OnDeltaStreamOpen invokes DeltaStreamOpenFunc.
-func (c CallbackFuncs) OnDeltaStreamOpen(ctx context.Context, streamID int64, typeURL string) error {
-	if c.DeltaStreamOpenFunc != nil {
-		return c.DeltaStreamOpenFunc(ctx, streamID, typeURL)
-	}
-
-	return nil
+	Send(*discovery.DeltaDiscoveryResponse) error
+	Recv() (*discovery.DeltaDiscoveryRequest, error)
 }
 
-// OnDeltaStreamClosed invokes DeltaStreamClosedFunc.
-func (c CallbackFuncs) OnDeltaStreamClosed(streamID int64, node *core.Node) {
-	if c.DeltaStreamClosedFunc != nil {
-		c.DeltaStreamClosedFunc(streamID, node)
-	}
+// NewXDSServer creates handlers from a config watcher and callbacks.
+func NewXDSServer(ctx context.Context, config cache.ConfigWatcher, callbacks Callbacks, opts ...config.XDSOption) XDSServer {
+	return &serverImpl{newStreamHandler(ctx, config, callbacks, opts...)}
 }
 
-// OnStreamDeltaRequest invokes StreamDeltaResponseFunc
-func (c CallbackFuncs) OnStreamDeltaRequest(streamID int64, req *discovery.DeltaDiscoveryRequest) error {
-	if c.StreamDeltaRequestFunc != nil {
-		return c.StreamDeltaRequestFunc(streamID, req)
-	}
-
-	return nil
-}
-
-// OnStreamDeltaResponse invokes StreamDeltaResponseFunc.
-func (c CallbackFuncs) OnStreamDeltaResponse(streamID int64, req *discovery.DeltaDiscoveryRequest, resp *discovery.DeltaDiscoveryResponse) {
-	if c.StreamDeltaResponseFunc != nil {
-		c.StreamDeltaResponseFunc(streamID, req, resp)
-	}
-}
-
-// NewServer creates handlers from a config watcher and callbacks.
-func NewServer(ctx context.Context, config cache.ConfigWatcher, callbacks Callbacks, opts ...config.XDSOption) Server {
-	return NewServerAdvanced(delta.NewServer(ctx, config, callbacks, opts...))
-}
-
-func NewServerAdvanced(deltaServer delta.Server) Server {
-	return &server{delta: deltaServer}
-}
-
-type server struct {
-	delta delta.Server
-}
-
-func (s *server) StreamAggregatedResources(stream discovery.AggregatedDiscoveryService_StreamAggregatedResourcesServer) error {
+func (s *serverImpl) StreamAggregatedResources(stream discovery.AggregatedDiscoveryService_StreamAggregatedResourcesServer) error {
 	panic("support delta stream only.")
 }
 
-func (s *server) DeltaStreamHandler(stream stream.DeltaStream, typeURL string) error {
+func (s *serverImpl) DeltaStreamHandler(stream DeltaStream, typeURL string) error {
 	return s.delta.DeltaStreamHandler(stream, typeURL)
 }
 
-func (s *server) DeltaAggregatedResources(stream discovery.AggregatedDiscoveryService_DeltaAggregatedResourcesServer) error {
+func (s *serverImpl) DeltaAggregatedResources(stream discovery.AggregatedDiscoveryService_DeltaAggregatedResourcesServer) error {
 	return s.DeltaStreamHandler(stream, resource.AnyType)
 }
 
-func (s *server) DeltaEndpoints(stream endpointservice.EndpointDiscoveryService_DeltaEndpointsServer) error {
+func (s *serverImpl) DeltaEndpoints(stream endpointservice.EndpointDiscoveryService_DeltaEndpointsServer) error {
 	return s.DeltaStreamHandler(stream, resource.EndpointType)
 }
 
-func (s *server) DeltaClusters(stream clusterservice.ClusterDiscoveryService_DeltaClustersServer) error {
+func (s *serverImpl) DeltaClusters(stream clusterservice.ClusterDiscoveryService_DeltaClustersServer) error {
 	return s.DeltaStreamHandler(stream, resource.ClusterType)
 }
 
-func (s *server) DeltaRoutes(stream routeservice.RouteDiscoveryService_DeltaRoutesServer) error {
+func (s *serverImpl) DeltaRoutes(stream routeservice.RouteDiscoveryService_DeltaRoutesServer) error {
 	return s.DeltaStreamHandler(stream, resource.RouteType)
 }
 
-func (s *server) DeltaScopedRoutes(stream routeservice.ScopedRoutesDiscoveryService_DeltaScopedRoutesServer) error {
+func (s *serverImpl) DeltaScopedRoutes(stream routeservice.ScopedRoutesDiscoveryService_DeltaScopedRoutesServer) error {
 	return s.DeltaStreamHandler(stream, resource.ScopedRouteType)
 }
 
-func (s *server) DeltaListeners(stream listenerservice.ListenerDiscoveryService_DeltaListenersServer) error {
+func (s *serverImpl) DeltaListeners(stream listenerservice.ListenerDiscoveryService_DeltaListenersServer) error {
 	return s.DeltaStreamHandler(stream, resource.ListenerType)
 }
 
-func (s *server) DeltaSecrets(stream secretservice.SecretDiscoveryService_DeltaSecretsServer) error {
+func (s *serverImpl) DeltaSecrets(stream secretservice.SecretDiscoveryService_DeltaSecretsServer) error {
 	return s.DeltaStreamHandler(stream, resource.SecretType)
 }
 
-func (s *server) DeltaRuntime(stream runtimeservice.RuntimeDiscoveryService_DeltaRuntimeServer) error {
+func (s *serverImpl) DeltaRuntime(stream runtimeservice.RuntimeDiscoveryService_DeltaRuntimeServer) error {
 	return s.DeltaStreamHandler(stream, resource.RuntimeType)
 }
 
-func (s *server) DeltaExtensionConfigs(stream extensionconfigservice.ExtensionConfigDiscoveryService_DeltaExtensionConfigsServer) error {
+func (s *serverImpl) DeltaExtensionConfigs(stream extensionconfigservice.ExtensionConfigDiscoveryService_DeltaExtensionConfigsServer) error {
 	return s.DeltaStreamHandler(stream, resource.ExtensionConfigType)
 }
 
-func (s *server) DeltaVirtualHosts(stream routeservice.VirtualHostDiscoveryService_DeltaVirtualHostsServer) error {
+func (s *serverImpl) DeltaVirtualHosts(stream routeservice.VirtualHostDiscoveryService_DeltaVirtualHostsServer) error {
 	return s.DeltaStreamHandler(stream, resource.VirtualHostType)
 }

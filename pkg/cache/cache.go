@@ -24,7 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
-	"github.com/envoyproxy/go-control-plane/pkg/server/stream"
+	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 )
@@ -39,7 +39,7 @@ type ConfigWatcher interface {
 	// the responses when they are ready. The watch can be canceled by the
 	// consumer, in effect terminating the watch for the request.
 	// ConfigWatcher implementation must be thread-safe.
-	CreateDeltaWatch(*DeltaRequest, stream.StreamState, chan DeltaResponse) (cancel func())
+	CreateDeltaWatch(*DeltaRequest, xdsservertypes.StreamState, chan DeltaResponse) (cancel func())
 }
 
 // DeltaResponse is a wrapper around Envoy's DeltaDiscoveryResponse
@@ -105,10 +105,6 @@ type DeltaPassthroughResponse struct {
 	ctx context.Context
 }
 
-var (
-	_ DeltaResponse = &DeltaPassthroughResponse{}
-)
-
 // GetDeltaDiscoveryResponse performs the marshaling the first time its called and uses the cached response subsequently.
 // We can do this because the marshaled response does not change across the calls.
 // This caching behavior is important in high throughput scenarios because grpc marshaling has a cost and it drives the cpu utilization under load.
@@ -170,31 +166,3 @@ func (r *RawDeltaResponse) GetContext() context.Context {
 }
 
 var deltaResourceTypeURL = "type.googleapis.com/" + string(proto.MessageName(&discovery.Resource{}))
-
-// GetDeltaDiscoveryResponse returns the final passthrough Delta Discovery Response.
-func (r *DeltaPassthroughResponse) GetDeltaDiscoveryResponse() (*discovery.DeltaDiscoveryResponse, error) {
-	return r.DeltaDiscoveryResponse, nil
-}
-
-// GetDeltaRequest returns the original Delta Discovery Request
-func (r *DeltaPassthroughResponse) GetDeltaRequest() *discovery.DeltaDiscoveryRequest {
-	return r.DeltaRequest
-}
-
-// GetSystemVersion returns the response version.
-func (r *DeltaPassthroughResponse) GetSystemVersion() (string, error) {
-	deltaDiscoveryResponse, _ := r.GetDeltaDiscoveryResponse()
-	if deltaDiscoveryResponse != nil {
-		return deltaDiscoveryResponse.GetSystemVersionInfo(), nil
-	}
-	return "", errors.New("DeltaDiscoveryResponse is nil")
-}
-
-// NextVersionMap returns the version map from a DeltaPassthroughResponse
-func (r *DeltaPassthroughResponse) GetNextVersionMap() map[string]string {
-	return r.NextVersionMap
-}
-
-func (r *DeltaPassthroughResponse) GetContext() context.Context {
-	return r.ctx
-}

@@ -18,7 +18,7 @@ import (
 	"context"
 
 	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
-	"github.com/envoyproxy/go-control-plane/pkg/server/stream"
+	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 )
 
 // groups together resource-related arguments for the createDeltaResponse function
@@ -28,7 +28,7 @@ type resourceContainer struct {
 	systemVersion string
 }
 
-func createDeltaResponse(ctx context.Context, req *DeltaRequest, state stream.StreamState, resources resourceContainer) *RawDeltaResponse {
+func createDeltaResponse(ctx context.Context, req *DeltaRequest, state xdsservertypes.StreamState, resources resourceContainer) *RawDeltaResponse {
 	// variables to build our response with
 	var nextVersionMap map[string]string
 	var filtered []types.Resource

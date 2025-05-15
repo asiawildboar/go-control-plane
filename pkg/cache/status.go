@@ -20,7 +20,7 @@ import (
 	"time"
 
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-	"github.com/envoyproxy/go-control-plane/pkg/server/stream"
+	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 )
 
 // NodeHash computes string identifiers for Envoy nodes.
@@ -80,7 +80,7 @@ type DeltaResponseWatch struct {
 	Response chan DeltaResponse
 
 	// VersionMap for the stream
-	StreamState stream.StreamState
+	StreamState xdsservertypes.StreamState
 }
 
 // newStatusInfo initializes a status info data structure.

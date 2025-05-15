@@ -1,4 +1,4 @@
-package delta
+package server
 
 import (
 	"context"
@@ -14,30 +14,12 @@ import (
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
 	"github.com/envoyproxy/go-control-plane/pkg/resource"
 	"github.com/envoyproxy/go-control-plane/pkg/server/config"
-	"github.com/envoyproxy/go-control-plane/pkg/server/stream"
+	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 )
-
-// Server is a wrapper interface which is meant to hold the proper stream handler for each xDS protocol.
-type Server interface {
-	DeltaStreamHandler(stream stream.DeltaStream, typeURL string) error
-}
-
-type Callbacks interface {
-	// OnDeltaStreamOpen is called once an incremental xDS stream is open with a stream ID and the type URL (or "" for ADS).
-	// Returning an error will end processing and close the stream. OnStreamClosed will still be called.
-	OnDeltaStreamOpen(context.Context, int64, string) error
-	// OnDeltaStreamClosed is called immediately prior to closing an xDS stream with a stream ID.
-	OnDeltaStreamClosed(int64, *core.Node)
-	// OnStreamDeltaRequest is called once a request is received on a stream.
-	// Returning an error will end processing and close the stream. OnStreamClosed will still be called.
-	OnStreamDeltaRequest(int64, *discovery.DeltaDiscoveryRequest) error
-	// OnStreamDeltaResponse is called immediately prior to sending a response on a stream.
-	OnStreamDeltaResponse(int64, *discovery.DeltaDiscoveryRequest, *discovery.DeltaDiscoveryResponse)
-}
 
 var deltaErrorResponse = &cache.RawDeltaResponse{}
 
-type server struct {
+type streamHandler struct {
 	configWatcher cache.ConfigWatcher
 	callbacks     Callbacks
 
@@ -50,8 +32,8 @@ type server struct {
 }
 
 // NewServer creates a delta xDS specific server which utilizes a ConfigWatcher and delta Callbacks.
-func NewServer(ctx context.Context, cw cache.ConfigWatcher, callbacks Callbacks, opts ...config.XDSOption) Server {
-	s := &server{
+func newStreamHandler(ctx context.Context, cw cache.ConfigWatcher, callbacks Callbacks, opts ...config.XDSOption) *streamHandler {
+	s := &streamHandler{
 		configWatcher: cw,
 		callbacks:     callbacks,
 		ctx:           ctx,
@@ -65,7 +47,7 @@ func NewServer(ctx context.Context, cw cache.ConfigWatcher, callbacks Callbacks,
 	return s
 }
 
-func (s *server) processDelta(str stream.DeltaStream, reqCh <-chan *discovery.DeltaDiscoveryRequest, defaultTypeURL string) error {
+func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.DeltaDiscoveryRequest, defaultTypeURL string) error {
 	streamID := atomic.AddInt64(&s.streamCount, 1)
 
 	// streamNonce holds a unique nonce for req-resp pairs per xDS stream.
@@ -210,7 +192,7 @@ func (s *server) processDelta(str stream.DeltaStream, reqCh <-chan *discovery.De
 				// We also set the stream as wildcard based on its legacy meaning (no resource name sent in resource_names_subscribe).
 				// If the state starts with this legacy mode, adding new resources will not unsubscribe from wildcard.
 				// It can still be done by explicitly unsubscribing from "*"
-				watch.state = stream.NewStreamState(len(req.GetResourceNamesSubscribe()) == 0, req.GetInitialResourceVersions())
+				watch.state = xdsservertypes.NewStreamState(len(req.GetResourceNamesSubscribe()) == 0, req.GetInitialResourceVersions())
 			} else {
 				watch.Cancel()
 			}
@@ -224,7 +206,7 @@ func (s *server) processDelta(str stream.DeltaStream, reqCh <-chan *discovery.De
 	}
 }
 
-func (s *server) DeltaStreamHandler(str stream.DeltaStream, typeURL string) error {
+func (s *streamHandler) DeltaStreamHandler(str DeltaStream, typeURL string) error {
 	// a channel for receiving incoming delta requests
 	reqCh := make(chan *discovery.DeltaDiscoveryRequest)
 
@@ -250,7 +232,7 @@ func (s *server) DeltaStreamHandler(str stream.DeltaStream, typeURL string) erro
 
 // When we subscribe, we just want to make the cache know we are subscribing to a resource.
 // Even if the stream is wildcard, we keep the list of explicitly subscribed resources as the wildcard subscription can be discarded later on.
-func subscribe(resources []string, streamState *stream.StreamState) {
+func subscribe(resources []string, streamState *xdsservertypes.StreamState) {
 	sv := streamState.GetSubscribedResourceNames()
 	for _, resource := range resources {
 		if resource == "*" {
@@ -263,7 +245,7 @@ func subscribe(resources []string, streamState *stream.StreamState) {
 
 // Unsubscriptions remove resources from the stream's subscribed resource list.
 // If a client explicitly unsubscribes from a wildcard request, the stream is updated and now watches only subscribed resources.
-func unsubscribe(resources []string, streamState *stream.StreamState) {
+func unsubscribe(resources []string, streamState *xdsservertypes.StreamState) {
 	sv := streamState.GetSubscribedResourceNames()
 	for _, resource := range resources {
 		if resource == "*" {
