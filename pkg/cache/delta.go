@@ -15,30 +15,27 @@
 package cache
 
 import (
-	"context"
-
-	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 )
 
 // groups together resource-related arguments for the createDeltaResponse function
 type resourceContainer struct {
-	resourceMap   map[string]types.Resource
+	resourceMap   map[string]Resource
 	versionMap    map[string]string
 	systemVersion string
 }
 
-func createDeltaResponse(ctx context.Context, req *DeltaRequest, state xdsservertypes.StreamState, resources resourceContainer) *RawDeltaResponse {
+func createDeltaResponse(state *xdsservertypes.ResourceSubscriptionState, resources resourceContainer) *RawDeltaResponse {
 	// variables to build our response with
 	var nextVersionMap map[string]string
-	var filtered []types.Resource
+	var filtered []Resource
 	var toRemove []string
 
 	// If we are handling a wildcard request, we want to respond with all resources
 	switch {
 	case state.IsWildcard():
 		if len(state.GetResourceVersions()) == 0 {
-			filtered = make([]types.Resource, 0, len(resources.resourceMap))
+			filtered = make([]Resource, 0, len(resources.resourceMap))
 		}
 		nextVersionMap = make(map[string]string, len(resources.resourceMap))
 		for name, r := range resources.resourceMap {
@@ -78,11 +75,10 @@ func createDeltaResponse(ctx context.Context, req *DeltaRequest, state xdsserver
 	}
 
 	return &RawDeltaResponse{
-		DeltaRequest:      req,
+		DeltaRequest:      state.GetDeltaRequest(),
 		Resources:         filtered,
 		RemovedResources:  toRemove,
-		NextVersionMap:    nextVersionMap,
+		VersionMap:        nextVersionMap,
 		SystemVersionInfo: resources.systemVersion,
-		Ctx:               ctx,
 	}
 }

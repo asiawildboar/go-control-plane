@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync/atomic"
 
@@ -13,37 +14,27 @@ import (
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
 	"github.com/envoyproxy/go-control-plane/pkg/resource"
-	"github.com/envoyproxy/go-control-plane/pkg/server/config"
 	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 )
 
 var deltaErrorResponse = &cache.RawDeltaResponse{}
 
 type streamHandler struct {
-	configWatcher cache.ConfigWatcher
+	configWatcher *cache.ConfigWatcher
 	callbacks     Callbacks
 
 	// total stream count for counting bi-di streams
 	streamCount int64
 	ctx         context.Context
-
-	// Local configuration flags for individual xDS implementations.
-	opts config.Opts
 }
 
 // NewServer creates a delta xDS specific server which utilizes a ConfigWatcher and delta Callbacks.
-func newStreamHandler(ctx context.Context, cw cache.ConfigWatcher, callbacks Callbacks, opts ...config.XDSOption) *streamHandler {
+func newStreamHandler(ctx context.Context, cw *cache.ConfigWatcher, callbacks Callbacks) *streamHandler {
 	s := &streamHandler{
 		configWatcher: cw,
 		callbacks:     callbacks,
 		ctx:           ctx,
 	}
-
-	// Parse through our options
-	for _, opt := range opts {
-		opt(&s.opts)
-	}
-
 	return s
 }
 
@@ -53,20 +44,19 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 	// streamNonce holds a unique nonce for req-resp pairs per xDS stream.
 	var streamNonce int64
 
-	// a collection of stack allocated watches per request type
-	watches := newWatches()
+	streamdata := xdsservertypes.NewStreamData()
+	s.configWatcher.AddWatchingStreamData(streamdata)
 
 	node := &core.Node{}
 
 	defer func() {
-		watches.Cancel()
 		if s.callbacks != nil {
 			s.callbacks.OnDeltaStreamClosed(streamID, node)
 		}
 	}()
 
 	// sends a response, returns the new stream nonce
-	send := func(resp cache.DeltaResponse) (string, error) {
+	send := func(resp xdsservertypes.DeltaResponse) (string, error) {
 		if resp == nil {
 			return "", errors.New("missing response")
 		}
@@ -86,22 +76,19 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 	}
 
 	// process a single delta response
-	process := func(resp cache.DeltaResponse) error {
+	process := func(resp xdsservertypes.DeltaResponse) error {
+		fmt.Println("pog process delta response", resp)
 		typ := resp.GetDeltaRequest().GetTypeUrl()
 		if resp == deltaErrorResponse {
 			return status.Errorf(codes.Unavailable, "%s watch failed", typ)
 		}
-
 		nonce, err := send(resp)
 		if err != nil {
 			return err
 		}
-
-		watch := watches.deltaWatches[typ]
-		watch.nonce = nonce
-
-		watch.state.SetResourceVersions(resp.GetNextVersionMap())
-		watches.deltaWatches[typ] = watch
+		streamdata.Nonce = nonce
+		perTypeSubscriptionState := streamdata.PerTypeSubscriptionState[typ]
+		perTypeSubscriptionState.SetResourceVersions(resp.GetVersionMap())
 		return nil
 	}
 
@@ -110,7 +97,7 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 		for {
 			select {
 			// We watch the multiplexed channel for incoming responses.
-			case resp, more := <-watches.deltaMuxedResponses:
+			case resp, more := <-streamdata.ResponseCh:
 				if !more {
 					break
 				}
@@ -134,25 +121,20 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 		case <-s.ctx.Done():
 			return nil
 		// We watch the multiplexed channel for incoming responses.
-		case resp, more := <-watches.deltaMuxedResponses:
-			// input stream ended or errored out
-			if !more {
+		case resp, ok := <-streamdata.ResponseCh:
+			if !ok {
 				break
 			}
-
 			if err := process(resp); err != nil {
 				return err
 			}
-		case req, more := <-reqCh:
-			// input stream ended or errored out
-			if !more {
+		case req, ok := <-reqCh:
+			if !ok {
 				return nil
 			}
-
 			if req == nil {
 				return status.Errorf(codes.Unavailable, "empty request")
 			}
-
 			// make sure all existing responses are processed prior to new requests to avoid deadlock
 			if err := processAll(); err != nil {
 				return err
@@ -184,24 +166,24 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 			typeURL := req.GetTypeUrl()
 
 			// cancel existing watch to (re-)request a newer version
-			watch, ok := watches.deltaWatches[typeURL]
-			if !ok {
+			if streamdata.PerTypeSubscriptionState[typeURL] == nil {
 				// Initialize the state of the stream.
 				// Since there was no previous state, we know we're handling the first request of this type
 				// so we set the initial resource versions if we have any.
 				// We also set the stream as wildcard based on its legacy meaning (no resource name sent in resource_names_subscribe).
 				// If the state starts with this legacy mode, adding new resources will not unsubscribe from wildcard.
 				// It can still be done by explicitly unsubscribing from "*"
-				watch.state = xdsservertypes.NewStreamState(len(req.GetResourceNamesSubscribe()) == 0, req.GetInitialResourceVersions())
-			} else {
-				watch.Cancel()
+				wildcard := len(req.GetResourceNamesSubscribe()) == 0
+				versionMap := req.GetInitialResourceVersions()
+				streamdata.PerTypeSubscriptionState[typeURL] = xdsservertypes.NewResourceSubscriptionState(typeURL, wildcard, versionMap)
 			}
+			perTypeSubscriptionState := streamdata.PerTypeSubscriptionState[typeURL]
+			perTypeSubscriptionState.SetDeltaRequest(req)
 
-			subscribe(req.GetResourceNamesSubscribe(), &watch.state)
-			unsubscribe(req.GetResourceNamesUnsubscribe(), &watch.state)
+			subscribe(req.GetResourceNamesSubscribe(), perTypeSubscriptionState)
+			unsubscribe(req.GetResourceNamesUnsubscribe(), perTypeSubscriptionState)
 
-			watch.cancel = s.configWatcher.CreateDeltaWatch(req, watch.state, watches.deltaMuxedResponses)
-			watches.deltaWatches[typeURL] = watch
+			s.configWatcher.CreateDeltaWatch(perTypeSubscriptionState, streamdata.ResponseCh)
 		}
 	}
 }
@@ -232,11 +214,11 @@ func (s *streamHandler) DeltaStreamHandler(str DeltaStream, typeURL string) erro
 
 // When we subscribe, we just want to make the cache know we are subscribing to a resource.
 // Even if the stream is wildcard, we keep the list of explicitly subscribed resources as the wildcard subscription can be discarded later on.
-func subscribe(resources []string, streamState *xdsservertypes.StreamState) {
-	sv := streamState.GetSubscribedResourceNames()
+func subscribe(resources []string, state *xdsservertypes.ResourceSubscriptionState) {
+	sv := state.GetSubscribedResourceNames()
 	for _, resource := range resources {
 		if resource == "*" {
-			streamState.SetWildcard(true)
+			state.SetWildcard(true)
 			continue
 		}
 		sv[resource] = struct{}{}
@@ -245,14 +227,14 @@ func subscribe(resources []string, streamState *xdsservertypes.StreamState) {
 
 // Unsubscriptions remove resources from the stream's subscribed resource list.
 // If a client explicitly unsubscribes from a wildcard request, the stream is updated and now watches only subscribed resources.
-func unsubscribe(resources []string, streamState *xdsservertypes.StreamState) {
-	sv := streamState.GetSubscribedResourceNames()
+func unsubscribe(resources []string, state *xdsservertypes.ResourceSubscriptionState) {
+	sv := state.GetSubscribedResourceNames()
 	for _, resource := range resources {
 		if resource == "*" {
-			streamState.SetWildcard(false)
+			state.SetWildcard(false)
 			continue
 		}
-		if _, ok := sv[resource]; ok && streamState.IsWildcard() {
+		if _, ok := sv[resource]; ok && state.IsWildcard() {
 			// The XDS protocol states that:
 			// * if a watch is currently wildcard
 			// * a resource is explicitly unsubscribed by name
@@ -261,7 +243,7 @@ func unsubscribe(resources []string, streamState *xdsservertypes.StreamState) {
 			// To achieve that, we mark the resource as having been returned with an empty version. While creating the response, the cache will either:
 			// * detect the version change, and return the resource (as an update)
 			// * detect the resource deletion, and set it as removed in the response
-			streamState.GetResourceVersions()[resource] = ""
+			state.GetResourceVersions()[resource] = ""
 		}
 		delete(sv, resource)
 	}

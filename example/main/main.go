@@ -45,22 +45,22 @@ func init() {
 	flag.StringVar(&nodeID, "nodeID", "test-id", "Node ID")
 }
 
-func setSnapshot(c cache.SnapshotCache) {
+func setSnapshot(c *cache.ConfigWatcher) {
 	// Create the snapshot that we'll serve to Envoy
 	snapshot := example.GenerateSnapshot(debugMsg)
 	l.Debugf("will serve snapshot %+v %d", snapshot, debugMsg)
 	debugMsg++
 	// Add the snapshot to the cache
-	if err := c.SetSnapshot(context.Background(), nodeID, snapshot); err != nil {
+	if err := c.SetSnapshot(snapshot); err != nil {
 		l.Errorf("snapshot error %q for %+v", err, snapshot)
 		os.Exit(1)
 	}
 }
 
-func SetSnapshotEvery1Minute(c cache.SnapshotCache) (bool, error) {
+func SetSnapshotRecurring(c *cache.ConfigWatcher, d time.Duration) (bool, error) {
 	setSnapshot(c)
 
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(d)
 	defer ticker.Stop()
 	done := make(chan bool)
 	for {
@@ -76,8 +76,8 @@ func main() {
 	flag.Parse()
 
 	// Create a cache
-	cache := cache.NewSnapshotCache(false, cache.IDHash{}, l)
-	go SetSnapshotEvery1Minute(cache)
+	cache := cache.NewConfigWatcher(l)
+	go SetSnapshotRecurring(cache, time.Second*10)
 
 	// Run the xDS server
 	ctx := context.Background()

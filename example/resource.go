@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -27,7 +28,6 @@ import (
 	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	tcp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/tcp_proxy/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
-	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	"github.com/envoyproxy/go-control-plane/pkg/resource"
 )
 
@@ -114,8 +114,8 @@ func makeTCPListener(listenerName string, clusterName string) *listener.Listener
 func GenerateSnapshot(debug int) *cache.Snapshot {
 	clusterName := ClusterName + "_debug_" + fmt.Sprint(debug)
 	snap, _ := cache.NewSnapshot("1",
-		map[resource.Type][]types.Resource{
-			// resource.ClusterType: {makeCluster(clusterName)},
+		map[resource.Type][]proto.Message{
+			resource.ClusterType:  {makeCluster(clusterName)},
 			resource.ListenerType: {makeTCPListener(ListenerName, clusterName)},
 		},
 	)

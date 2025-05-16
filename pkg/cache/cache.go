@@ -16,51 +16,22 @@
 package cache
 
 import (
-	"context"
 	"errors"
 	"sync/atomic"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
-	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
-
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 )
 
-// DeltaRequest is an alias for the delta discovery request type.
-type DeltaRequest = discovery.DeltaDiscoveryRequest
-
-// Cache is a generic config cache with a watcher.
-type ConfigWatcher interface {
-	// ConfigWatcher requests watches for configuration resources by a node, last
-	// applied version identifier, and resource names hint. The watch should send
-	// the responses when they are ready. The watch can be canceled by the
-	// consumer, in effect terminating the watch for the request.
-	// ConfigWatcher implementation must be thread-safe.
-	CreateDeltaWatch(*DeltaRequest, xdsservertypes.StreamState, chan DeltaResponse) (cancel func())
+// Resource is the base interface for the xDS payload.
+type Resource interface {
+	proto.Message
 }
 
-// DeltaResponse is a wrapper around Envoy's DeltaDiscoveryResponse
-type DeltaResponse interface {
-	// Get the constructed DeltaDiscoveryResponse
-	GetDeltaDiscoveryResponse() (*discovery.DeltaDiscoveryResponse, error)
-
-	// Get the request that created the watch that we're now responding to. This is provided to allow the caller to correlate the
-	// response with a request. Generally this will be the latest request seen on the stream for the specific type.
-	GetDeltaRequest() *discovery.DeltaDiscoveryRequest
-
-	// Get the version in the DeltaResponse. This field is generally used for debugging purposes as noted by the Envoy documentation.
-	GetSystemVersion() (string, error)
-
-	// Get the version map of the internal cache.
-	// The version map consists of updated version mappings after this response is applied
-	GetNextVersionMap() map[string]string
-
-	// Get the context provided during response creation
-	GetContext() context.Context
-}
+// MarshaledResource is an alias for the serialized binary array.
+type MarshaledResource = []byte
 
 // RawDeltaResponse is a pre-serialized xDS response that utilizes the delta discovery request/response objects.
 type RawDeltaResponse struct {
@@ -71,38 +42,16 @@ type RawDeltaResponse struct {
 	SystemVersionInfo string
 
 	// Resources to be included in the response.
-	Resources []types.Resource
+	Resources []Resource
 
 	// RemovedResources is a list of resource aliases which should be dropped by the consuming client.
 	RemovedResources []string
 
-	// NextVersionMap consists of updated version mappings after this response is applied
-	NextVersionMap map[string]string
-
-	// Context provided at the time of response creation. This allows associating additional
-	// information with a generated response.
-	Ctx context.Context
+	// VersionMap consists of updated version mappings after this response is applied
+	VersionMap map[string]string
 
 	// Marshaled Resources to be included in the response.
 	marshaledResponse atomic.Value
-}
-
-var (
-	_ DeltaResponse = &RawDeltaResponse{}
-)
-
-// DeltaPassthroughResponse is a pre constructed xDS response that need not go through marshaling transformations.
-type DeltaPassthroughResponse struct {
-	// Request is the latest delta request on the stream
-	DeltaRequest *discovery.DeltaDiscoveryRequest
-
-	// NextVersionMap consists of updated version mappings after this response is applied
-	NextVersionMap map[string]string
-
-	// This discovery response that needs to be sent as is, without any marshaling transformations
-	DeltaDiscoveryResponse *discovery.DeltaDiscoveryResponse
-
-	ctx context.Context
 }
 
 // GetDeltaDiscoveryResponse performs the marshaling the first time its called and uses the cached response subsequently.
@@ -157,12 +106,6 @@ func (r *RawDeltaResponse) GetSystemVersion() (string, error) {
 }
 
 // NextVersionMap returns the version map which consists of updated version mappings after this response is applied
-func (r *RawDeltaResponse) GetNextVersionMap() map[string]string {
-	return r.NextVersionMap
+func (r *RawDeltaResponse) GetVersionMap() map[string]string {
+	return r.VersionMap
 }
-
-func (r *RawDeltaResponse) GetContext() context.Context {
-	return r.Ctx
-}
-
-var deltaResourceTypeURL = "type.googleapis.com/" + string(proto.MessageName(&discovery.Resource{}))

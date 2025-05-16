@@ -40,8 +40,8 @@ type Server struct {
 	xdsserver server.XDSServer
 }
 
-func NewServer(ctx context.Context, cache cache.ConfigWatcher, cb *Callbacks) *Server {
-	srv := server.NewXDSServer(ctx, cache, cb)
+func NewServer(ctx context.Context, cw *cache.ConfigWatcher, cb *Callbacks) *Server {
+	srv := server.NewXDSServer(ctx, cw, cb)
 	return &Server{srv}
 }
 

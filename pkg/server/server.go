@@ -6,7 +6,6 @@ import (
 
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
 	"github.com/envoyproxy/go-control-plane/pkg/resource"
-	"github.com/envoyproxy/go-control-plane/pkg/server/config"
 	"google.golang.org/grpc"
 
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -53,8 +52,8 @@ type DeltaStream interface {
 }
 
 // NewXDSServer creates handlers from a config watcher and callbacks.
-func NewXDSServer(ctx context.Context, config cache.ConfigWatcher, callbacks Callbacks, opts ...config.XDSOption) XDSServer {
-	return &serverImpl{newStreamHandler(ctx, config, callbacks, opts...)}
+func NewXDSServer(ctx context.Context, config *cache.ConfigWatcher, callbacks Callbacks) XDSServer {
+	return &serverImpl{newStreamHandler(ctx, config, callbacks)}
 }
 
 func (s *serverImpl) StreamAggregatedResources(stream discovery.AggregatedDiscoveryService_StreamAggregatedResourcesServer) error {

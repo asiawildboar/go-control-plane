@@ -20,26 +20,18 @@ import (
 
 	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	"github.com/envoyproxy/go-control-plane/pkg/resource"
+	"google.golang.org/protobuf/proto"
 )
 
-// Snapshot is an internally consistent snapshot of xDS resources.
-// Consistency is important for the convergence as different resource types
-// from the snapshot may be delivered to the proxy in arbitrary order.
 type Snapshot struct {
 	Resources [types.UnknownType]Resources
 
-	// VersionMap holds the current hash map of all resources in the snapshot.
-	// This field should remain nil until it is used, at which point should be
-	// instantiated by calling ConstructVersionMap().
-	// VersionMap is only to be used with delta xDS.
 	VersionMap map[string]map[string]string
 }
 
-var _ ResourceSnapshot = &Snapshot{}
-
 // NewSnapshot creates a snapshot from response types and a version.
 // The resources map is keyed off the type URL of a resource, followed by the slice of resource objects.
-func NewSnapshot(version string, resources map[resource.Type][]types.Resource) (*Snapshot, error) {
+func NewSnapshot(version string, resources map[resource.Type][]proto.Message) (*Snapshot, error) {
 	out := Snapshot{}
 
 	for typ, resource := range resources {
@@ -51,44 +43,14 @@ func NewSnapshot(version string, resources map[resource.Type][]types.Resource) (
 		out.Resources[index] = NewResources(version, resource)
 	}
 
-	return &out, nil
-}
-
-// NewSnapshotWithTTLs creates a snapshot of ResourceWithTTLs.
-// The resources map is keyed off the type URL of a resource, followed by the slice of resource objects.
-func NewSnapshotWithTTLs(version string, resources map[resource.Type][]types.ResourceWithTTL) (*Snapshot, error) {
-	out := Snapshot{}
-
-	for typ, resource := range resources {
-		index := GetResponseType(typ)
-		if index == types.UnknownType {
-			return nil, errors.New("unknown resource type: " + typ)
-		}
-
-		out.Resources[index] = NewResourcesWithTTL(version, resource)
-	}
-
+	fmt.Println("pog Snapshot resources:", out.Resources)
+	fmt.Println("pog Snapshot GetResources:", out.GetResources(resource.ListenerType))
+	fmt.Println("pog Snapshot GetVersion:", out.GetVersion(resource.ListenerType))
 	return &out, nil
 }
 
 // GetResources selects snapshot resources by type, returning the map of resources.
-func (s *Snapshot) GetResources(typeURL resource.Type) map[string]types.Resource {
-	resources := s.GetResourcesAndTTL(typeURL)
-	if resources == nil {
-		return nil
-	}
-
-	withoutTTL := make(map[string]types.Resource, len(resources))
-
-	for k, v := range resources {
-		withoutTTL[k] = v.Resource
-	}
-
-	return withoutTTL
-}
-
-// GetResourcesAndTTL selects snapshot resources by type, returning the map of resources and the associated TTL.
-func (s *Snapshot) GetResourcesAndTTL(typeURL resource.Type) map[string]types.ResourceWithTTL {
+func (s *Snapshot) GetResources(typeURL resource.Type) map[string]Resource {
 	if s == nil {
 		return nil
 	}
@@ -96,7 +58,14 @@ func (s *Snapshot) GetResourcesAndTTL(typeURL resource.Type) map[string]types.Re
 	if typ == types.UnknownType {
 		return nil
 	}
-	return s.Resources[typ].Items
+	resources := s.Resources[typ].Items
+	withoutTTL := make(map[string]Resource, len(resources))
+
+	for k, v := range resources {
+		withoutTTL[k] = v
+	}
+
+	return withoutTTL
 }
 
 // GetVersion returns the version for a resource type.
@@ -140,7 +109,7 @@ func (s *Snapshot) ConstructVersionMap() error {
 
 		for _, r := range resources.Items {
 			// Hash our version in here and build the version map.
-			marshaledResource, err := MarshalResource(r.Resource)
+			marshaledResource, err := MarshalResource(r)
 			if err != nil {
 				return err
 			}
@@ -149,7 +118,7 @@ func (s *Snapshot) ConstructVersionMap() error {
 				return fmt.Errorf("failed to build resource version: %w", err)
 			}
 
-			s.VersionMap[typeURL][GetResourceName(r.Resource)] = v
+			s.VersionMap[typeURL][GetResourceName(r)] = v
 		}
 	}
 
