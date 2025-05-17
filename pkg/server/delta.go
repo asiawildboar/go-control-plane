@@ -1,7 +1,6 @@
 package xdsserver
 
 import (
-	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -12,7 +11,7 @@ type resourceContainer struct {
 	systemVersion string
 }
 
-func CreateDeltaResponse(state *xdsservertypes.ResourceSubscriptionState, resources resourceContainer) (*xdsservertypes.DeltaResponseWrapper, error) {
+func CreateDeltaResponse(state *ResourceSubscriptionState, resources resourceContainer) (*DeltaResponseWrapper, error) {
 	// variables to build our response with
 	var nextVersionMap map[string]string
 	var filtered []proto.Message
@@ -61,7 +60,7 @@ func CreateDeltaResponse(state *xdsservertypes.ResourceSubscriptionState, resour
 		}
 	}
 
-	return &xdsservertypes.DeltaResponseWrapper{
+	return &DeltaResponseWrapper{
 		DeltaRequest:      state.GetDeltaRequest(),
 		TypeURL:           state.GetTypeURL(),
 		Resources:         filtered,

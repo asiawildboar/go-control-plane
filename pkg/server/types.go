@@ -1,4 +1,4 @@
-package xdsservertypes
+package xdsserver
 
 import (
 	"crypto/sha256"

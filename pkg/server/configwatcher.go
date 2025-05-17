@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/envoyproxy/go-control-plane/pkg/log"
-	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -23,7 +22,7 @@ type XDSStore struct {
 type ConfigWatcher struct {
 	log log.Logger
 
-	streamData *xdsservertypes.StreamData
+	streamData *StreamData
 	snapshot   *Snapshot
 
 	mu sync.RWMutex
@@ -34,51 +33,40 @@ func NewConfigWatcher(logger log.Logger) *ConfigWatcher {
 		logger = log.NewDefaultLogger()
 	}
 
-	cache := &ConfigWatcher{
+	cw := &ConfigWatcher{
 		log: logger,
 	}
 
-	return cache
+	return cw
 }
 
-func (cache *ConfigWatcher) AddWatchingStreamData(streamData *xdsservertypes.StreamData) {
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
+func (cw *ConfigWatcher) SetStreamData(streamData *StreamData) {
+	cw.mu.Lock()
+	defer cw.mu.Unlock()
 
-	cache.streamData = streamData
+	cw.streamData = streamData
 }
 
-// SetSnapshotCache updates a snapshot for a node.
-func (cache *ConfigWatcher) SetSnapshot(snapshot *Snapshot) error {
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
+func (cw *ConfigWatcher) NotifySnapshot(snapshot *Snapshot) error {
+	cw.mu.Lock()
+	defer cw.mu.Unlock()
 
 	// update the existing entry
-	cache.snapshot = snapshot
+	cw.snapshot = snapshot
+	fmt.Println("[ConfigWatcher]-[notify]", "snapshot", snapshot)
 
-	// trigger existing watches for which version changed
-	return cache.notify(snapshot)
-}
-
-func (cache *ConfigWatcher) notify(snapshot *Snapshot) error {
-	fmt.Println("pog configwatcher notify", snapshot)
-	err := snapshot.ConstructVersionMap()
-	if err != nil {
-		return err
-	}
-
-	if cache.streamData == nil {
-		cache.log.Debugf("no stream data found, not sending response")
+	if cw.streamData == nil {
+		cw.log.Debugf("no stream data found, not sending response")
 		return nil
 	}
 
-	fmt.Println("pog configWatcher state", cache.streamData.PerTypeSubscriptionState)
+	fmt.Println("[ConfigWatcher]-[notify]", "stream state", cw.streamData.PerTypeSubscriptionState)
 
 	// If ADS is enabled we need to order response delta watches so we guarantee
 	// sending them in the correct order. But we care CDS and LDS only, no need
 	// to order it for now.
-	for _, state := range cache.streamData.PerTypeSubscriptionState {
-		_, err := cache.respondDelta(context.Background(), snapshot, state, cache.streamData.ResponseCh)
+	for _, state := range cw.streamData.PerTypeSubscriptionState {
+		err := cw.respondDelta(context.Background(), snapshot, state, cw.streamData.ResponseCh)
 		if err != nil {
 			return err
 		}
@@ -87,45 +75,23 @@ func (cache *ConfigWatcher) notify(snapshot *Snapshot) error {
 	return nil
 }
 
-// GetSnapshot gets the snapshot for a node, and returns an error if not found.
-func (cache *ConfigWatcher) GetSnapshot() (*Snapshot, error) {
-	cache.mu.RLock()
-	defer cache.mu.RUnlock()
+func (cw *ConfigWatcher) FetchSnapshot(state *ResourceSubscriptionState, deltaRespCh chan *DeltaResponseWrapper) error {
+	cw.mu.Lock()
+	defer cw.mu.Unlock()
+	fmt.Println("[ConfigWatcher]-[Fetch]", state.GetDeltaRequest().TypeUrl)
 
-	if cache.snapshot == nil {
-		return nil, fmt.Errorf("no snapshot found")
-	}
-	return cache.snapshot, nil
-}
-
-// CreateDeltaWatch returns a watch for a delta xDS request which implements the Simple SnapshotCache.
-func (cache *ConfigWatcher) CreateDeltaWatch(state *xdsservertypes.ResourceSubscriptionState, deltaRespCh chan *xdsservertypes.DeltaResponseWrapper) error {
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
-	fmt.Println("pog CreateDeltaWatch", state.GetDeltaRequest().TypeUrl)
-
-	if cache.snapshot != nil {
-		// 如果snapshot已存在
-		err := cache.snapshot.ConstructVersionMap()
+	if cw.snapshot != nil {
+		err := cw.respondDelta(context.Background(), cw.snapshot, state, deltaRespCh)
 		if err != nil {
-			cache.log.Errorf("failed to compute version for snapshot resources inline: %s", err)
-			return err
-		}
-		fmt.Println("pog CreateDeltaWatch before")
-		_, err = cache.respondDelta(context.Background(), cache.snapshot, state, deltaRespCh)
-		fmt.Println("pog CreateDeltaWatch after")
-		if err != nil {
-			cache.log.Errorf("failed to respond with delta response: %s", err)
+			cw.log.Errorf("failed to respond with delta response: %s", err)
 			return err
 		}
 	}
-
-	fmt.Println("pog CreateDeltaWatch returned")
 	return nil
 }
 
 // Respond to a delta watch with the provided snapshot value. If the response is nil, there has been no state change.
-func (cache *ConfigWatcher) respondDelta(ctx context.Context, snapshot *Snapshot, state *xdsservertypes.ResourceSubscriptionState, responseCh chan *xdsservertypes.DeltaResponseWrapper) (*xdsservertypes.DeltaResponseWrapper, error) {
+func (cw *ConfigWatcher) respondDelta(ctx context.Context, snapshot *Snapshot, state *ResourceSubscriptionState, responseCh chan *DeltaResponseWrapper) error {
 	resp, err := CreateDeltaResponse(
 		state,
 		resourceContainer{
@@ -135,29 +101,25 @@ func (cache *ConfigWatcher) respondDelta(ctx context.Context, snapshot *Snapshot
 		},
 	)
 	if err != nil {
-		cache.log.Errorf("failed to create delta response: %s", err)
-		return nil, err
+		cw.log.Errorf("failed to create delta response: %s", err)
+		return err
 	}
-
-	fmt.Println("pog respondDelta, snapshot.GetResources(state.GetTypeURL())", snapshot.GetResources(state.GetTypeURL()), state.GetTypeURL())
-	fmt.Println("pog respondDelta, snapshot.GetVersionMap(state.GetTypeURL())", snapshot.GetVersionMap(state.GetTypeURL()), state.GetTypeURL())
-	fmt.Println("pog respondDelta, napshot.GetVersion(state.GetTypeURL())", snapshot.GetVersion(state.GetTypeURL()), state.GetTypeURL())
-	fmt.Println("pog respondDelta", resp)
+	fmt.Println("[ConfigWatcher]-[respondDelta]", "typeURL", state.GetTypeURL(), "resourceMap", snapshot.GetResources(state.GetTypeURL()), "versionMap", snapshot.GetVersionMap(state.GetTypeURL()), "systemVersion", snapshot.GetVersion(state.GetTypeURL()))
 
 	// Only send a response if there were changes
 	// We want to respond immediately for the first wildcard request in a stream, even if the response is empty
 	// otherwise, envoy won't complete initialization
 	if len(resp.Resources) > 0 || len(resp.RemovedResources) > 0 || (state.IsWildcard() && state.IsFirst()) {
-		if cache.log != nil {
-			cache.log.Debugf("sending delta response for typeURL %s with resources: %v removed resources: %v with wildcard: %t",
+		if cw.log != nil {
+			cw.log.Debugf("[ConfigWatcher]-[respondDelta] sending delta response for typeURL %s with resources: %v removed resources: %v with wildcard: %t",
 				state.GetTypeURL(), state.GetSubscribedResourceNames(), resp.RemovedResources, state.IsWildcard())
 		}
 		select {
 		case responseCh <- resp:
-			return resp, nil
+			return nil
 		case <-ctx.Done():
-			return resp, context.Canceled
+			return context.Canceled
 		}
 	}
-	return nil, nil
+	return nil
 }

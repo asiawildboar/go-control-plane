@@ -22,7 +22,7 @@ var _ xdsserver.Callbacks = &Callbacks{}
 
 func (cb *Callbacks) OnDeltaStreamOpen(_ context.Context, id int64, typ string) error {
 	if cb.Debug {
-		log.Printf("delta stream %d open for %s\n", id, typ)
+		log.Printf("[Callbacks]-[OnDeltaStreamOpen] delta stream %d open\n", id)
 	}
 	return nil
 }
@@ -34,14 +34,18 @@ func (cb *Callbacks) OnDeltaStreamClosed(id int64, node *core.Node) {
 }
 
 func (cb *Callbacks) OnStreamDeltaResponse(id int64, req *discovery.DeltaDiscoveryRequest, res *discovery.DeltaDiscoveryResponse) {
-	log.Println("OnStreamDeltaResponse pog", res.String())
+	var resourceNames []string
+	for _, resource := range res.GetResources() {
+		resourceNames = append(resourceNames, resource.GetName())
+	}
+	log.Println("[Callbacks]-[OnStreamDeltaResponse]", req.TypeUrl, "resourceNames", resourceNames)
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.DeltaResponses++
 }
 
 func (cb *Callbacks) OnStreamDeltaRequest(id int64, req *discovery.DeltaDiscoveryRequest) error {
-	log.Println("OnStreamDeltaRequest pog", req.String())
+	log.Println("[Callbacks]-[OnStreamDeltaRequest]", req.GetTypeUrl(), "subscribe", req.GetResourceNamesSubscribe(), "unsubscribe", req.GetResourceNamesUnsubscribe(), "InitialResourceVersions", req.GetInitialResourceVersions(), "ResponseNonce", req.GetResponseNonce())
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.DeltaRequests++

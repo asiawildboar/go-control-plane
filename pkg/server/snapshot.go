@@ -4,9 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	cluster "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
-	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
-	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -17,18 +14,6 @@ type Resources struct {
 
 	// Items in the group indexed by name.
 	Items map[string]proto.Message
-}
-
-// GetResourceName returns the resource name for a valid xDS response type.
-func GetResourceName(res proto.Message) string {
-	switch v := res.(type) {
-	case *listener.Listener:
-		return v.GetName()
-	case *cluster.Cluster:
-		return v.GetName()
-	default:
-		return ""
-	}
 }
 
 // IndexResourcesByName creates a map from the resource name to the resource.
@@ -57,35 +42,40 @@ type Snapshot struct {
 // NewSnapshot creates a snapshot from response types and a version.
 // The resources map is keyed off the type URL of a resource, followed by the slice of resource objects.
 func NewSnapshot(version string, resources map[string][]proto.Message) (*Snapshot, error) {
-	out := Snapshot{}
+	out := Snapshot{
+		Resources:  make(map[string]Resources, len(resources)),
+		VersionMap: make(map[string]map[string]string),
+	}
 
 	for typ, resource := range resources {
 		out.Resources[typ] = NewResources(version, resource)
 	}
 
-	fmt.Println("pog Snapshot resources:", out.Resources)
-	fmt.Println("pog Snapshot GetResources:", out.GetResources(xdsservertypes.ListenerType))
-	fmt.Println("pog Snapshot GetVersion:", out.GetVersion(xdsservertypes.ListenerType))
+	// Construct the version map for the snapshot.
+	if err := out.ConstructVersionMap(); err != nil {
+		return nil, fmt.Errorf("failed to construct version map: %w", err)
+	}
+
+	fmt.Println("[NewSnapshot] resources:", out, "GetResources", out.GetResources(ListenerType), "GetVersion", out.GetVersion(ListenerType))
 	return &out, nil
 }
 
 // GetResources selects snapshot resources by type, returning the map of resources.
-func (s *Snapshot) GetResources(typeURL xdsservertypes.Type) map[string]proto.Message {
+func (s *Snapshot) GetResources(typeURL Type) map[string]proto.Message {
 	if s == nil {
 		return nil
 	}
 	resources := s.Resources[typeURL].Items
-	withoutTTL := make(map[string]proto.Message, len(resources))
+	res := make(map[string]proto.Message, len(resources))
 
 	for k, v := range resources {
-		withoutTTL[k] = v
+		res[k] = v
 	}
-
-	return withoutTTL
+	return res
 }
 
 // GetVersion returns the version for a resource type.
-func (s *Snapshot) GetVersion(typeURL xdsservertypes.Type) string {
+func (s *Snapshot) GetVersion(typeURL Type) string {
 	if s == nil {
 		return ""
 	}
@@ -103,11 +93,6 @@ func (s *Snapshot) ConstructVersionMap() error {
 		return errors.New("missing snapshot")
 	}
 
-	// The snapshot resources never change, so no need to ever rebuild.
-	if s.VersionMap != nil {
-		return nil
-	}
-
 	s.VersionMap = make(map[string]map[string]string)
 
 	for typeURL, resources := range s.Resources {
@@ -117,11 +102,11 @@ func (s *Snapshot) ConstructVersionMap() error {
 
 		for _, r := range resources.Items {
 			// Hash our version in here and build the version map.
-			marshaledResource, err := xdsservertypes.MarshalResource(r)
+			marshaledResource, err := MarshalResource(r)
 			if err != nil {
 				return err
 			}
-			v := xdsservertypes.HashResource(marshaledResource)
+			v := HashResource(marshaledResource)
 			if v == "" {
 				return fmt.Errorf("failed to build resource version: %w", err)
 			}

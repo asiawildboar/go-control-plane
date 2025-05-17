@@ -12,7 +12,6 @@ import (
 
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 )
 
 type streamHandler struct {
@@ -40,8 +39,8 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 	// streamNonce holds a unique nonce for req-resp pairs per xDS stream.
 	var streamNonce int64
 
-	streamdata := xdsservertypes.NewStreamData()
-	s.configWatcher.AddWatchingStreamData(streamdata)
+	streamdata := NewStreamData()
+	s.configWatcher.SetStreamData(streamdata)
 
 	node := &core.Node{}
 
@@ -52,7 +51,7 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 	}()
 
 	// sends a response, returns the new stream nonce
-	send := func(resp *xdsservertypes.DeltaResponseWrapper) (string, error) {
+	send := func(resp *DeltaResponseWrapper) (string, error) {
 		if resp == nil {
 			return "", errors.New("missing response")
 		}
@@ -72,8 +71,7 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 	}
 
 	// process a single delta response
-	process := func(resp *xdsservertypes.DeltaResponseWrapper) error {
-		fmt.Println("pog process delta response", resp)
+	process := func(resp *DeltaResponseWrapper) error {
 		nonce, err := send(resp)
 		if err != nil {
 			return err
@@ -147,7 +145,7 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 			}
 
 			// type URL is required for ADS but is implicit for any other xDS stream
-			if defaultTypeURL == xdsservertypes.AnyType {
+			if defaultTypeURL == AnyType {
 				if req.GetTypeUrl() == "" {
 					return status.Errorf(codes.InvalidArgument, "type URL is required for ADS")
 				}
@@ -167,7 +165,8 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 				// It can still be done by explicitly unsubscribing from "*"
 				wildcard := len(req.GetResourceNamesSubscribe()) == 0
 				versionMap := req.GetInitialResourceVersions()
-				streamdata.PerTypeSubscriptionState[typeURL] = xdsservertypes.NewResourceSubscriptionState(typeURL, wildcard, versionMap)
+				fmt.Println("[streamHandler]-[DeltaStreamHandler] new PerTypeSubscriptionState ", "typeURL", typeURL, "wildcard", wildcard, "versionMap", versionMap)
+				streamdata.PerTypeSubscriptionState[typeURL] = NewResourceSubscriptionState(typeURL, wildcard, versionMap)
 			}
 			perTypeSubscriptionState := streamdata.PerTypeSubscriptionState[typeURL]
 			perTypeSubscriptionState.SetDeltaRequest(req)
@@ -175,7 +174,7 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 			subscribe(req.GetResourceNamesSubscribe(), perTypeSubscriptionState)
 			unsubscribe(req.GetResourceNamesUnsubscribe(), perTypeSubscriptionState)
 
-			s.configWatcher.CreateDeltaWatch(perTypeSubscriptionState, streamdata.ResponseCh)
+			s.configWatcher.FetchSnapshot(perTypeSubscriptionState, streamdata.ResponseCh)
 		}
 	}
 }
@@ -206,7 +205,7 @@ func (s *streamHandler) DeltaStreamHandler(str DeltaStream, typeURL string) erro
 
 // When we subscribe, we just want to make the cache know we are subscribing to a resource.
 // Even if the stream is wildcard, we keep the list of explicitly subscribed resources as the wildcard subscription can be discarded later on.
-func subscribe(resources []string, state *xdsservertypes.ResourceSubscriptionState) {
+func subscribe(resources []string, state *ResourceSubscriptionState) {
 	sv := state.GetSubscribedResourceNames()
 	for _, resource := range resources {
 		if resource == "*" {
@@ -219,7 +218,7 @@ func subscribe(resources []string, state *xdsservertypes.ResourceSubscriptionSta
 
 // Unsubscriptions remove resources from the stream's subscribed resource list.
 // If a client explicitly unsubscribes from a wildcard request, the stream is updated and now watches only subscribed resources.
-func unsubscribe(resources []string, state *xdsservertypes.ResourceSubscriptionState) {
+func unsubscribe(resources []string, state *ResourceSubscriptionState) {
 	sv := state.GetSubscribedResourceNames()
 	for _, resource := range resources {
 		if resource == "*" {

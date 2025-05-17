@@ -44,20 +44,20 @@ func init() {
 	flag.StringVar(&nodeID, "nodeID", "test-id", "Node ID")
 }
 
-func setSnapshot(c *xdsserver.ConfigWatcher) {
+func notifySnapshot(c *xdsserver.ConfigWatcher) {
 	// Create the snapshot that we'll serve to Envoy
 	snapshot := example.GenerateSnapshot(debugMsg)
-	l.Debugf("will serve snapshot %+v %d", snapshot, debugMsg)
+	l.Debugf("[notifySnapshot] will serve snapshot %d", debugMsg)
 	debugMsg++
 	// Add the snapshot to the cache
-	if err := c.SetSnapshot(snapshot); err != nil {
+	if err := c.NotifySnapshot(snapshot); err != nil {
 		l.Errorf("snapshot error %q for %+v", err, snapshot)
 		os.Exit(1)
 	}
 }
 
 func SetSnapshotRecurring(c *xdsserver.ConfigWatcher, d time.Duration) (bool, error) {
-	setSnapshot(c)
+	notifySnapshot(c)
 
 	ticker := time.NewTicker(d)
 	defer ticker.Stop()
@@ -65,7 +65,7 @@ func SetSnapshotRecurring(c *xdsserver.ConfigWatcher, d time.Duration) (bool, er
 	for {
 		select {
 		case <-ticker.C:
-			setSnapshot(c)
+			notifySnapshot(c)
 		case <-done:
 		}
 	}
@@ -76,7 +76,7 @@ func main() {
 
 	// Create a cache
 	cache := xdsserver.NewConfigWatcher(l)
-	go SetSnapshotRecurring(cache, time.Second*10)
+	go SetSnapshotRecurring(cache, time.Second*60)
 
 	// Run the xDS server
 	ctx := context.Background()
