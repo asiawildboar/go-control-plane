@@ -18,25 +18,24 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
-	"github.com/envoyproxy/go-control-plane/pkg/resource"
+	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 	"google.golang.org/protobuf/proto"
 )
 
 type Snapshot struct {
-	Resources [types.UnknownType]Resources
+	Resources [xdsservertypes.UnknownType]Resources
 
 	VersionMap map[string]map[string]string
 }
 
 // NewSnapshot creates a snapshot from response types and a version.
 // The resources map is keyed off the type URL of a resource, followed by the slice of resource objects.
-func NewSnapshot(version string, resources map[resource.Type][]proto.Message) (*Snapshot, error) {
+func NewSnapshot(version string, resources map[xdsservertypes.Type][]proto.Message) (*Snapshot, error) {
 	out := Snapshot{}
 
 	for typ, resource := range resources {
 		index := GetResponseType(typ)
-		if index == types.UnknownType {
+		if index == xdsservertypes.UnknownType {
 			return nil, errors.New("unknown resource type: " + typ)
 		}
 
@@ -44,18 +43,18 @@ func NewSnapshot(version string, resources map[resource.Type][]proto.Message) (*
 	}
 
 	fmt.Println("pog Snapshot resources:", out.Resources)
-	fmt.Println("pog Snapshot GetResources:", out.GetResources(resource.ListenerType))
-	fmt.Println("pog Snapshot GetVersion:", out.GetVersion(resource.ListenerType))
+	fmt.Println("pog Snapshot GetResources:", out.GetResources(xdsservertypes.ListenerType))
+	fmt.Println("pog Snapshot GetVersion:", out.GetVersion(xdsservertypes.ListenerType))
 	return &out, nil
 }
 
 // GetResources selects snapshot resources by type, returning the map of resources.
-func (s *Snapshot) GetResources(typeURL resource.Type) map[string]Resource {
+func (s *Snapshot) GetResources(typeURL xdsservertypes.Type) map[string]Resource {
 	if s == nil {
 		return nil
 	}
 	typ := GetResponseType(typeURL)
-	if typ == types.UnknownType {
+	if typ == xdsservertypes.UnknownType {
 		return nil
 	}
 	resources := s.Resources[typ].Items
@@ -69,12 +68,12 @@ func (s *Snapshot) GetResources(typeURL resource.Type) map[string]Resource {
 }
 
 // GetVersion returns the version for a resource type.
-func (s *Snapshot) GetVersion(typeURL resource.Type) string {
+func (s *Snapshot) GetVersion(typeURL xdsservertypes.Type) string {
 	if s == nil {
 		return ""
 	}
 	typ := GetResponseType(typeURL)
-	if typ == types.UnknownType {
+	if typ == xdsservertypes.UnknownType {
 		return ""
 	}
 	return s.Resources[typ].Version
@@ -99,7 +98,7 @@ func (s *Snapshot) ConstructVersionMap() error {
 	s.VersionMap = make(map[string]map[string]string)
 
 	for i, resources := range s.Resources {
-		typeURL, err := GetResponseTypeURL(types.ResponseType(i))
+		typeURL, err := GetResponseTypeURL(xdsservertypes.ResponseType(i))
 		if err != nil {
 			return err
 		}

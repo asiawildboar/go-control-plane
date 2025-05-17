@@ -28,7 +28,7 @@ import (
 	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	tcp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/tcp_proxy/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
-	"github.com/envoyproxy/go-control-plane/pkg/resource"
+	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 )
 
 const (
@@ -114,9 +114,9 @@ func makeTCPListener(listenerName string, clusterName string) *listener.Listener
 func GenerateSnapshot(debug int) *cache.Snapshot {
 	clusterName := ClusterName + "_debug_" + fmt.Sprint(debug)
 	snap, _ := cache.NewSnapshot("1",
-		map[resource.Type][]proto.Message{
-			resource.ClusterType:  {makeCluster(clusterName)},
-			resource.ListenerType: {makeTCPListener(ListenerName, clusterName)},
+		map[xdsservertypes.Type][]proto.Message{
+			xdsservertypes.ClusterType:  {makeCluster(clusterName)},
+			xdsservertypes.ListenerType: {makeTCPListener(ListenerName, clusterName)},
 		},
 	)
 	fmt.Print("pog GenerateSnapshot: Snapshot: ", snap)

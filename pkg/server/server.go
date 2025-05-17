@@ -5,7 +5,7 @@ import (
 	"context"
 
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
-	"github.com/envoyproxy/go-control-plane/pkg/resource"
+	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 	"google.golang.org/grpc"
 
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -65,41 +65,41 @@ func (s *serverImpl) DeltaStreamHandler(stream DeltaStream, typeURL string) erro
 }
 
 func (s *serverImpl) DeltaAggregatedResources(stream discovery.AggregatedDiscoveryService_DeltaAggregatedResourcesServer) error {
-	return s.DeltaStreamHandler(stream, resource.AnyType)
+	return s.DeltaStreamHandler(stream, xdsservertypes.AnyType)
 }
 
 func (s *serverImpl) DeltaEndpoints(stream endpointservice.EndpointDiscoveryService_DeltaEndpointsServer) error {
-	return s.DeltaStreamHandler(stream, resource.EndpointType)
+	return s.DeltaStreamHandler(stream, xdsservertypes.EndpointType)
 }
 
 func (s *serverImpl) DeltaClusters(stream clusterservice.ClusterDiscoveryService_DeltaClustersServer) error {
-	return s.DeltaStreamHandler(stream, resource.ClusterType)
+	return s.DeltaStreamHandler(stream, xdsservertypes.ClusterType)
 }
 
 func (s *serverImpl) DeltaRoutes(stream routeservice.RouteDiscoveryService_DeltaRoutesServer) error {
-	return s.DeltaStreamHandler(stream, resource.RouteType)
+	return s.DeltaStreamHandler(stream, xdsservertypes.RouteType)
 }
 
 func (s *serverImpl) DeltaScopedRoutes(stream routeservice.ScopedRoutesDiscoveryService_DeltaScopedRoutesServer) error {
-	return s.DeltaStreamHandler(stream, resource.ScopedRouteType)
+	return s.DeltaStreamHandler(stream, xdsservertypes.ScopedRouteType)
 }
 
 func (s *serverImpl) DeltaListeners(stream listenerservice.ListenerDiscoveryService_DeltaListenersServer) error {
-	return s.DeltaStreamHandler(stream, resource.ListenerType)
+	return s.DeltaStreamHandler(stream, xdsservertypes.ListenerType)
 }
 
 func (s *serverImpl) DeltaSecrets(stream secretservice.SecretDiscoveryService_DeltaSecretsServer) error {
-	return s.DeltaStreamHandler(stream, resource.SecretType)
+	return s.DeltaStreamHandler(stream, xdsservertypes.SecretType)
 }
 
 func (s *serverImpl) DeltaRuntime(stream runtimeservice.RuntimeDiscoveryService_DeltaRuntimeServer) error {
-	return s.DeltaStreamHandler(stream, resource.RuntimeType)
+	return s.DeltaStreamHandler(stream, xdsservertypes.RuntimeType)
 }
 
 func (s *serverImpl) DeltaExtensionConfigs(stream extensionconfigservice.ExtensionConfigDiscoveryService_DeltaExtensionConfigsServer) error {
-	return s.DeltaStreamHandler(stream, resource.ExtensionConfigType)
+	return s.DeltaStreamHandler(stream, xdsservertypes.ExtensionConfigType)
 }
 
 func (s *serverImpl) DeltaVirtualHosts(stream routeservice.VirtualHostDiscoveryService_DeltaVirtualHostsServer) error {
-	return s.DeltaStreamHandler(stream, resource.VirtualHostType)
+	return s.DeltaStreamHandler(stream, xdsservertypes.VirtualHostType)
 }

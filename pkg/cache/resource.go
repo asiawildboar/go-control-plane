@@ -19,8 +19,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
-	"github.com/envoyproxy/go-control-plane/pkg/resource"
+	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -46,55 +45,55 @@ func GetResourceNames(resources []Resource) []string {
 	return out
 }
 
-func GetResponseType(typeURL resource.Type) types.ResponseType {
+func GetResponseType(typeURL xdsservertypes.Type) xdsservertypes.ResponseType {
 	switch typeURL {
-	case resource.EndpointType:
-		return types.Endpoint
-	case resource.ClusterType:
-		return types.Cluster
-	case resource.RouteType:
-		return types.Route
-	case resource.ScopedRouteType:
-		return types.ScopedRoute
-	case resource.VirtualHostType:
-		return types.VirtualHost
-	case resource.ListenerType:
-		return types.Listener
-	case resource.SecretType:
-		return types.Secret
-	case resource.RuntimeType:
-		return types.Runtime
-	case resource.ExtensionConfigType:
-		return types.ExtensionConfig
-	case resource.RateLimitConfigType:
-		return types.RateLimitConfig
+	case xdsservertypes.EndpointType:
+		return xdsservertypes.Endpoint
+	case xdsservertypes.ClusterType:
+		return xdsservertypes.Cluster
+	case xdsservertypes.RouteType:
+		return xdsservertypes.Route
+	case xdsservertypes.ScopedRouteType:
+		return xdsservertypes.ScopedRoute
+	case xdsservertypes.VirtualHostType:
+		return xdsservertypes.VirtualHost
+	case xdsservertypes.ListenerType:
+		return xdsservertypes.Listener
+	case xdsservertypes.SecretType:
+		return xdsservertypes.Secret
+	case xdsservertypes.RuntimeType:
+		return xdsservertypes.Runtime
+	case xdsservertypes.ExtensionConfigType:
+		return xdsservertypes.ExtensionConfig
+	case xdsservertypes.RateLimitConfigType:
+		return xdsservertypes.RateLimitConfig
 	}
-	return types.UnknownType
+	return xdsservertypes.UnknownType
 }
 
 // GetResponseTypeURL returns the type url for a valid enum.
-func GetResponseTypeURL(responseType types.ResponseType) (string, error) {
+func GetResponseTypeURL(responseType xdsservertypes.ResponseType) (string, error) {
 	switch responseType {
-	case types.Endpoint:
-		return resource.EndpointType, nil
-	case types.Cluster:
-		return resource.ClusterType, nil
-	case types.Route:
-		return resource.RouteType, nil
-	case types.ScopedRoute:
-		return resource.ScopedRouteType, nil
-	case types.VirtualHost:
-		return resource.VirtualHostType, nil
-	case types.Listener:
-		return resource.ListenerType, nil
-	case types.Secret:
-		return resource.SecretType, nil
-	case types.Runtime:
-		return resource.RuntimeType, nil
-	case types.ExtensionConfig:
-		return resource.ExtensionConfigType, nil
-	case types.RateLimitConfig:
-		return resource.RateLimitConfigType, nil
+	case xdsservertypes.Endpoint:
+		return xdsservertypes.EndpointType, nil
+	case xdsservertypes.Cluster:
+		return xdsservertypes.ClusterType, nil
+	case xdsservertypes.Route:
+		return xdsservertypes.RouteType, nil
+	case xdsservertypes.ScopedRoute:
+		return xdsservertypes.ScopedRouteType, nil
+	case xdsservertypes.VirtualHost:
+		return xdsservertypes.VirtualHostType, nil
+	case xdsservertypes.Listener:
+		return xdsservertypes.ListenerType, nil
+	case xdsservertypes.Secret:
+		return xdsservertypes.SecretType, nil
+	case xdsservertypes.Runtime:
+		return xdsservertypes.RuntimeType, nil
+	case xdsservertypes.ExtensionConfig:
+		return xdsservertypes.ExtensionConfigType, nil
+	case xdsservertypes.RateLimitConfig:
+		return xdsservertypes.RateLimitConfigType, nil
 	default:
 		return "", fmt.Errorf("couldn't map response type %v to known resource type", responseType)
 	}

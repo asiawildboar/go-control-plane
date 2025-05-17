@@ -4,6 +4,51 @@ import (
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 )
 
+// Type is an alias to string which we expose to users of the snapshot API which accepts `resource.Type` resource URLs.
+type Type = string
+
+// Resource types in xDS v3.
+const (
+	APITypePrefix       = "type.googleapis.com/"
+	EndpointType        = APITypePrefix + "envoy.config.endpoint.v3.ClusterLoadAssignment"
+	ClusterType         = APITypePrefix + "envoy.config.cluster.v3.Cluster"
+	RouteType           = APITypePrefix + "envoy.config.route.v3.RouteConfiguration"
+	ScopedRouteType     = APITypePrefix + "envoy.config.route.v3.ScopedRouteConfiguration"
+	VirtualHostType     = APITypePrefix + "envoy.config.route.v3.VirtualHost"
+	ListenerType        = APITypePrefix + "envoy.config.listener.v3.Listener"
+	SecretType          = APITypePrefix + "envoy.extensions.transport_sockets.tls.v3.Secret"
+	ExtensionConfigType = APITypePrefix + "envoy.config.core.v3.TypedExtensionConfig"
+	RuntimeType         = APITypePrefix + "envoy.service.runtime.v3.Runtime"
+	ThriftRouteType     = APITypePrefix + "envoy.extensions.filters.network.thrift_proxy.v3.RouteConfiguration"
+
+	// Rate Limit service
+	RateLimitConfigType = APITypePrefix + "ratelimit.config.ratelimit.v3.RateLimitConfig"
+
+	// AnyType is used only by ADS
+	AnyType = ""
+)
+
+// ResponseType enumeration of supported response types
+type ResponseType int
+
+// NOTE: The order of this enum MATTERS!
+// https://www.envoyproxy.io/docs/envoy/latest/api-docs/xds_protocol#aggregated-discovery-service
+// ADS expects things to be returned in a specific order.
+// See the following issue for details: https://github.com/envoyproxy/go-control-plane/issues/526
+const (
+	Cluster ResponseType = iota
+	Endpoint
+	Listener
+	Route
+	ScopedRoute
+	VirtualHost
+	Secret
+	Runtime
+	ExtensionConfig
+	RateLimitConfig
+	UnknownType // token to count the total number of supported types
+)
+
 // DeltaResponse is a wrapper around Envoy's DeltaDiscoveryResponse
 type DeltaResponse interface {
 	// Get the constructed DeltaDiscoveryResponse

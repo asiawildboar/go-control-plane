@@ -13,7 +13,6 @@ import (
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
-	"github.com/envoyproxy/go-control-plane/pkg/resource"
 	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 )
 
@@ -155,7 +154,7 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 			}
 
 			// type URL is required for ADS but is implicit for any other xDS stream
-			if defaultTypeURL == resource.AnyType {
+			if defaultTypeURL == xdsservertypes.AnyType {
 				if req.GetTypeUrl() == "" {
 					return status.Errorf(codes.InvalidArgument, "type URL is required for ADS")
 				}

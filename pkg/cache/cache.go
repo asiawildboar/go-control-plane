@@ -54,6 +54,43 @@ type RawDeltaResponse struct {
 	marshaledResponse atomic.Value
 }
 
+func CreateDeltaDiscoveryResponse(
+	typeURL string,
+	systemVersionInfo string,
+	resources []Resource,
+	removedResources []string,
+	versionMap map[string]string,
+) (*discovery.DeltaDiscoveryResponse, error) {
+	marshaledResources := make([]*discovery.Resource, len(resources))
+
+	for i, resource := range resources {
+		name := GetResourceName(resource)
+		marshaledResource, err := MarshalResource(resource)
+		if err != nil {
+			return nil, err
+		}
+		version := HashResource(marshaledResource)
+		if version == "" {
+			return nil, errors.New("failed to create a resource hash")
+		}
+		marshaledResources[i] = &discovery.Resource{
+			Name: name,
+			Resource: &anypb.Any{
+				TypeUrl: typeURL,
+				Value:   marshaledResource,
+			},
+			Version: version,
+		}
+	}
+
+	return &discovery.DeltaDiscoveryResponse{
+		Resources:         marshaledResources,
+		RemovedResources:  removedResources,
+		TypeUrl:           typeURL,
+		SystemVersionInfo: systemVersionInfo,
+	}, nil
+}
+
 // GetDeltaDiscoveryResponse performs the marshaling the first time its called and uses the cached response subsequently.
 // We can do this because the marshaled response does not change across the calls.
 // This caching behavior is important in high throughput scenarios because grpc marshaling has a cost and it drives the cpu utilization under load.
