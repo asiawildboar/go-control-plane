@@ -25,8 +25,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	discoverygrpc "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	"github.com/envoyproxy/go-control-plane/pkg/cache"
-	"github.com/envoyproxy/go-control-plane/pkg/server"
+	xdsserver "github.com/envoyproxy/go-control-plane/pkg/server"
 )
 
 const (
@@ -37,11 +36,11 @@ const (
 )
 
 type Server struct {
-	xdsserver server.XDSServer
+	xdsserver xdsserver.XDSServer
 }
 
-func NewServer(ctx context.Context, cw *cache.ConfigWatcher, cb *Callbacks) *Server {
-	srv := server.NewXDSServer(ctx, cw, cb)
+func NewServer(ctx context.Context, cw *xdsserver.ConfigWatcher, cb *Callbacks) *Server {
+	srv := xdsserver.NewXDSServer(ctx, cw, cb)
 	return &Server{srv}
 }
 
@@ -82,13 +81,13 @@ func (s *Server) Run(port uint) {
 	}
 }
 
-func registerServer(grpcServer *grpc.Server, server server.XDSServer) {
+func registerServer(grpcServer *grpc.Server, server xdsserver.XDSServer) {
 	// register services
 	discoverygrpc.RegisterAggregatedDiscoveryServiceServer(grpcServer, server)
 }
 
 // RunServer starts an xDS server at the given port.
-func RunServer(srv server.XDSServer, port uint) {
+func RunServer(srv xdsserver.XDSServer, port uint) {
 	// gRPC golang library sets a very small upper bound for the number gRPC/h2
 	// streams over a single TCP connection. If a proxy multiplexes requests over
 	// a single connection to the management server, then it might lead to

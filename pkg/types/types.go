@@ -1,7 +1,15 @@
 package xdsservertypes
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+
+	cluster "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
+	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // Type is an alias to string which we expose to users of the snapshot API which accepts `resource.Type` resource URLs.
@@ -49,24 +57,96 @@ const (
 	UnknownType // token to count the total number of supported types
 )
 
+// GetResourceName returns the resource names for a list of valid xDS response types.
+func GetResourceNames(resources []proto.Message) []string {
+	out := make([]string, len(resources))
+	for i, r := range resources {
+		out[i] = GetResourceName(r)
+	}
+	return out
+}
+
+// GetResourceName returns the resource name for a valid xDS response type.
+func GetResourceName(res proto.Message) string {
+	switch v := res.(type) {
+	case *listener.Listener:
+		return v.GetName()
+	case *cluster.Cluster:
+		return v.GetName()
+	default:
+		return ""
+	}
+}
+
+// MarshalResource converts the Resource to MarshaledResource.
+func MarshalResource(resource proto.Message) ([]byte, error) {
+	return proto.MarshalOptions{Deterministic: true}.Marshal(resource)
+}
+
+// HashResource will take a resource and create a SHA256 hash sum out of the marshaled bytes
+func HashResource(resource []byte) string {
+	hasher := sha256.New()
+	hasher.Write(resource)
+
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
 // DeltaResponse is a wrapper around Envoy's DeltaDiscoveryResponse
-type DeltaResponse interface {
-	// Get the constructed DeltaDiscoveryResponse
-	GetDeltaDiscoveryResponse() (*discovery.DeltaDiscoveryResponse, error)
+type DeltaResponseWrapper struct {
+	// For debugging purposes only
+	DeltaRequest *discovery.DeltaDiscoveryRequest
 
-	// Get the request that created the watch that we're now responding to. This is provided to allow the caller to correlate the
-	// response with a request. Generally this will be the latest request seen on the stream for the specific type.
-	GetDeltaRequest() *discovery.DeltaDiscoveryRequest
+	// Request is the latest delta request on the stream.
+	TypeURL string
 
-	// Get the version in the DeltaResponse. This field is generally used for debugging purposes as noted by the Envoy documentation.
-	GetSystemVersion() (string, error)
+	// SystemVersionInfo holds the currently applied response system version and should be used for debugging purposes only.
+	SystemVersionInfo string
 
-	// Get the version map of the internal cache.
-	// The version map consists of updated version mappings after this response is applied
-	GetVersionMap() map[string]string
+	// Resources to be included in the response.
+	Resources []proto.Message
+
+	// RemovedResources is a list of resource aliases which should be dropped by the consuming client.
+	RemovedResources []string
+
+	// VersionMap consists of updated version mappings after this response is applied
+	VersionMap map[string]string
+}
+
+func (d *DeltaResponseWrapper) GetDeltaDiscoveryResponse() (*discovery.DeltaDiscoveryResponse, error) {
+	marshaledResources := make([]*discovery.Resource, len(d.Resources))
+
+	for i, resource := range d.Resources {
+		name := GetResourceName(resource)
+		marshaledResource, err := MarshalResource(resource)
+		if err != nil {
+			return nil, err
+		}
+		version := HashResource(marshaledResource)
+		if version == "" {
+			return nil, errors.New("failed to create a resource hash")
+		}
+		marshaledResources[i] = &discovery.Resource{
+			Name: name,
+			Resource: &anypb.Any{
+				TypeUrl: d.TypeURL,
+				Value:   marshaledResource,
+			},
+			Version: version,
+		}
+	}
+
+	return &discovery.DeltaDiscoveryResponse{
+		Resources:         marshaledResources,
+		RemovedResources:  d.RemovedResources,
+		TypeUrl:           d.TypeURL,
+		SystemVersionInfo: d.SystemVersionInfo,
+	}, nil
 }
 
 type ResourceSubscriptionState struct {
+	// For logging and callback purposes
+	deltaRequest *discovery.DeltaDiscoveryRequest
+
 	typeURL string
 
 	// Indicates whether the delta stream currently has a wildcard watch
@@ -82,9 +162,6 @@ type ResourceSubscriptionState struct {
 
 	// First indicates whether the StreamState has been modified since its creation
 	first bool
-
-	// For logging and callback purposes
-	deltaRequest *discovery.DeltaDiscoveryRequest
 }
 
 func NewResourceSubscriptionState(typeURL string, wildcard bool, initialResourceVersions map[string]string) *ResourceSubscriptionState {
@@ -146,7 +223,7 @@ func (s *ResourceSubscriptionState) GetTypeURL() string {
 
 type StreamData struct {
 	// Opaque resources share a muxed channel
-	ResponseCh chan DeltaResponse
+	ResponseCh chan *DeltaResponseWrapper
 	Nonce      string
 
 	PerTypeSubscriptionState map[string]*ResourceSubscriptionState
@@ -159,7 +236,7 @@ func NewStreamData() *StreamData {
 	// and a request from the client, we need to create the channel with
 	// a buffersize of 2x the number of types to avoid deadlocks.
 	return &StreamData{
-		ResponseCh:               make(chan DeltaResponse, 10),
+		ResponseCh:               make(chan *DeltaResponseWrapper, 10),
 		PerTypeSubscriptionState: make(map[string]*ResourceSubscriptionState),
 	}
 }

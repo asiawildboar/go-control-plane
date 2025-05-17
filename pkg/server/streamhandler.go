@@ -1,4 +1,4 @@
-package server
+package xdsserver
 
 import (
 	"context"
@@ -12,14 +12,11 @@ import (
 
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	"github.com/envoyproxy/go-control-plane/pkg/cache"
 	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 )
 
-var deltaErrorResponse = &cache.RawDeltaResponse{}
-
 type streamHandler struct {
-	configWatcher *cache.ConfigWatcher
+	configWatcher *ConfigWatcher
 	callbacks     Callbacks
 
 	// total stream count for counting bi-di streams
@@ -28,7 +25,7 @@ type streamHandler struct {
 }
 
 // NewServer creates a delta xDS specific server which utilizes a ConfigWatcher and delta Callbacks.
-func newStreamHandler(ctx context.Context, cw *cache.ConfigWatcher, callbacks Callbacks) *streamHandler {
+func newStreamHandler(ctx context.Context, cw *ConfigWatcher, callbacks Callbacks) *streamHandler {
 	s := &streamHandler{
 		configWatcher: cw,
 		callbacks:     callbacks,
@@ -55,7 +52,7 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 	}()
 
 	// sends a response, returns the new stream nonce
-	send := func(resp xdsservertypes.DeltaResponse) (string, error) {
+	send := func(resp *xdsservertypes.DeltaResponseWrapper) (string, error) {
 		if resp == nil {
 			return "", errors.New("missing response")
 		}
@@ -68,26 +65,22 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 		streamNonce++
 		response.Nonce = strconv.FormatInt(streamNonce, 10)
 		if s.callbacks != nil {
-			s.callbacks.OnStreamDeltaResponse(streamID, resp.GetDeltaRequest(), response)
+			s.callbacks.OnStreamDeltaResponse(streamID, resp.DeltaRequest, response)
 		}
 
 		return response.GetNonce(), str.Send(response)
 	}
 
 	// process a single delta response
-	process := func(resp xdsservertypes.DeltaResponse) error {
+	process := func(resp *xdsservertypes.DeltaResponseWrapper) error {
 		fmt.Println("pog process delta response", resp)
-		typ := resp.GetDeltaRequest().GetTypeUrl()
-		if resp == deltaErrorResponse {
-			return status.Errorf(codes.Unavailable, "%s watch failed", typ)
-		}
 		nonce, err := send(resp)
 		if err != nil {
 			return err
 		}
 		streamdata.Nonce = nonce
-		perTypeSubscriptionState := streamdata.PerTypeSubscriptionState[typ]
-		perTypeSubscriptionState.SetResourceVersions(resp.GetVersionMap())
+		perTypeSubscriptionState := streamdata.PerTypeSubscriptionState[resp.TypeURL]
+		perTypeSubscriptionState.SetResourceVersions(resp.VersionMap)
 		return nil
 	}
 

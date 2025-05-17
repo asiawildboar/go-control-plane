@@ -1,41 +1,28 @@
-// Copyright 2020 Envoyproxy Authors
-//
-//   Licensed under the Apache License, Version 2.0 (the "License");
-//   you may not use this file except in compliance with the License.
-//   You may obtain a copy of the License at
-//
-//       http://www.apache.org/licenses/LICENSE-2.0
-//
-//   Unless required by applicable law or agreed to in writing, software
-//   distributed under the License is distributed on an "AS IS" BASIS,
-//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//   See the License for the specific language governing permissions and
-//   limitations under the License.
-
-package cache
+package xdsserver
 
 import (
 	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
+	"google.golang.org/protobuf/proto"
 )
 
 // groups together resource-related arguments for the createDeltaResponse function
 type resourceContainer struct {
-	resourceMap   map[string]Resource
+	resourceMap   map[string]proto.Message
 	versionMap    map[string]string
 	systemVersion string
 }
 
-func createDeltaResponse(state *xdsservertypes.ResourceSubscriptionState, resources resourceContainer) *RawDeltaResponse {
+func CreateDeltaResponse(state *xdsservertypes.ResourceSubscriptionState, resources resourceContainer) (*xdsservertypes.DeltaResponseWrapper, error) {
 	// variables to build our response with
 	var nextVersionMap map[string]string
-	var filtered []Resource
+	var filtered []proto.Message
 	var toRemove []string
 
 	// If we are handling a wildcard request, we want to respond with all resources
 	switch {
 	case state.IsWildcard():
 		if len(state.GetResourceVersions()) == 0 {
-			filtered = make([]Resource, 0, len(resources.resourceMap))
+			filtered = make([]proto.Message, 0, len(resources.resourceMap))
 		}
 		nextVersionMap = make(map[string]string, len(resources.resourceMap))
 		for name, r := range resources.resourceMap {
@@ -74,11 +61,12 @@ func createDeltaResponse(state *xdsservertypes.ResourceSubscriptionState, resour
 		}
 	}
 
-	return &RawDeltaResponse{
+	return &xdsservertypes.DeltaResponseWrapper{
 		DeltaRequest:      state.GetDeltaRequest(),
+		TypeURL:           state.GetTypeURL(),
 		Resources:         filtered,
 		RemovedResources:  toRemove,
 		VersionMap:        nextVersionMap,
 		SystemVersionInfo: resources.systemVersion,
-	}
+	}, nil
 }

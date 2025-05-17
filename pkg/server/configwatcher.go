@@ -1,18 +1,4 @@
-// Copyright 2018 Envoyproxy Authors
-//
-//   Licensed under the Apache License, Version 2.0 (the "License");
-//   you may not use this file except in compliance with the License.
-//   You may obtain a copy of the License at
-//
-//       http://www.apache.org/licenses/LICENSE-2.0
-//
-//   Unless required by applicable law or agreed to in writing, software
-//   distributed under the License is distributed on an "AS IS" BASIS,
-//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//   See the License for the specific language governing permissions and
-//   limitations under the License.
-
-package cache
+package xdsserver
 
 import (
 	"context"
@@ -113,7 +99,7 @@ func (cache *ConfigWatcher) GetSnapshot() (*Snapshot, error) {
 }
 
 // CreateDeltaWatch returns a watch for a delta xDS request which implements the Simple SnapshotCache.
-func (cache *ConfigWatcher) CreateDeltaWatch(state *xdsservertypes.ResourceSubscriptionState, deltaRespCh chan xdsservertypes.DeltaResponse) func() {
+func (cache *ConfigWatcher) CreateDeltaWatch(state *xdsservertypes.ResourceSubscriptionState, deltaRespCh chan *xdsservertypes.DeltaResponseWrapper) error {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 	fmt.Println("pog CreateDeltaWatch", state.GetDeltaRequest().TypeUrl)
@@ -123,12 +109,14 @@ func (cache *ConfigWatcher) CreateDeltaWatch(state *xdsservertypes.ResourceSubsc
 		err := cache.snapshot.ConstructVersionMap()
 		if err != nil {
 			cache.log.Errorf("failed to compute version for snapshot resources inline: %s", err)
+			return err
 		}
 		fmt.Println("pog CreateDeltaWatch before")
 		_, err = cache.respondDelta(context.Background(), cache.snapshot, state, deltaRespCh)
 		fmt.Println("pog CreateDeltaWatch after")
 		if err != nil {
 			cache.log.Errorf("failed to respond with delta response: %s", err)
+			return err
 		}
 	}
 
@@ -137,8 +125,8 @@ func (cache *ConfigWatcher) CreateDeltaWatch(state *xdsservertypes.ResourceSubsc
 }
 
 // Respond to a delta watch with the provided snapshot value. If the response is nil, there has been no state change.
-func (cache *ConfigWatcher) respondDelta(ctx context.Context, snapshot *Snapshot, state *xdsservertypes.ResourceSubscriptionState, responseCh chan xdsservertypes.DeltaResponse) (*RawDeltaResponse, error) {
-	resp := createDeltaResponse(
+func (cache *ConfigWatcher) respondDelta(ctx context.Context, snapshot *Snapshot, state *xdsservertypes.ResourceSubscriptionState, responseCh chan *xdsservertypes.DeltaResponseWrapper) (*xdsservertypes.DeltaResponseWrapper, error) {
+	resp, err := CreateDeltaResponse(
 		state,
 		resourceContainer{
 			resourceMap:   snapshot.GetResources(state.GetTypeURL()),
@@ -146,6 +134,10 @@ func (cache *ConfigWatcher) respondDelta(ctx context.Context, snapshot *Snapshot
 			systemVersion: snapshot.GetVersion(state.GetTypeURL()),
 		},
 	)
+	if err != nil {
+		cache.log.Errorf("failed to create delta response: %s", err)
+		return nil, err
+	}
 
 	fmt.Println("pog respondDelta, snapshot.GetResources(state.GetTypeURL())", snapshot.GetResources(state.GetTypeURL()), state.GetTypeURL())
 	fmt.Println("pog respondDelta, snapshot.GetVersionMap(state.GetTypeURL())", snapshot.GetVersionMap(state.GetTypeURL()), state.GetTypeURL())
@@ -158,7 +150,7 @@ func (cache *ConfigWatcher) respondDelta(ctx context.Context, snapshot *Snapshot
 	if len(resp.Resources) > 0 || len(resp.RemovedResources) > 0 || (state.IsWildcard() && state.IsFirst()) {
 		if cache.log != nil {
 			cache.log.Debugf("sending delta response for typeURL %s with resources: %v removed resources: %v with wildcard: %t",
-				state.GetTypeURL(), GetResourceNames(resp.Resources), resp.RemovedResources, state.IsWildcard())
+				state.GetTypeURL(), state.GetSubscribedResourceNames(), resp.RemovedResources, state.IsWildcard())
 		}
 		select {
 		case responseCh <- resp:

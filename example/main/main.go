@@ -21,8 +21,7 @@ import (
 	"time"
 
 	"github.com/envoyproxy/go-control-plane/example"
-	"github.com/envoyproxy/go-control-plane/pkg/cache"
-	"github.com/envoyproxy/go-control-plane/pkg/server"
+	xdsserver "github.com/envoyproxy/go-control-plane/pkg/server"
 )
 
 var (
@@ -45,7 +44,7 @@ func init() {
 	flag.StringVar(&nodeID, "nodeID", "test-id", "Node ID")
 }
 
-func setSnapshot(c *cache.ConfigWatcher) {
+func setSnapshot(c *xdsserver.ConfigWatcher) {
 	// Create the snapshot that we'll serve to Envoy
 	snapshot := example.GenerateSnapshot(debugMsg)
 	l.Debugf("will serve snapshot %+v %d", snapshot, debugMsg)
@@ -57,7 +56,7 @@ func setSnapshot(c *cache.ConfigWatcher) {
 	}
 }
 
-func SetSnapshotRecurring(c *cache.ConfigWatcher, d time.Duration) (bool, error) {
+func SetSnapshotRecurring(c *xdsserver.ConfigWatcher, d time.Duration) (bool, error) {
 	setSnapshot(c)
 
 	ticker := time.NewTicker(d)
@@ -76,12 +75,12 @@ func main() {
 	flag.Parse()
 
 	// Create a cache
-	cache := cache.NewConfigWatcher(l)
+	cache := xdsserver.NewConfigWatcher(l)
 	go SetSnapshotRecurring(cache, time.Second*10)
 
 	// Run the xDS server
 	ctx := context.Background()
 	cb := &example.Callbacks{Debug: l.Debug}
-	srv := server.NewXDSServer(ctx, cache, cb)
+	srv := xdsserver.NewXDSServer(ctx, cache, cb)
 	example.RunServer(srv, port)
 }

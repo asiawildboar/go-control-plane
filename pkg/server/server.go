@@ -1,10 +1,8 @@
-// Package server provides an implementation of a streaming xDS server.
-package server
+package xdsserver
 
 import (
 	"context"
 
-	"github.com/envoyproxy/go-control-plane/pkg/cache"
 	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 	"google.golang.org/grpc"
 
@@ -52,7 +50,7 @@ type DeltaStream interface {
 }
 
 // NewXDSServer creates handlers from a config watcher and callbacks.
-func NewXDSServer(ctx context.Context, config *cache.ConfigWatcher, callbacks Callbacks) XDSServer {
+func NewXDSServer(ctx context.Context, config *ConfigWatcher, callbacks Callbacks) XDSServer {
 	return &serverImpl{newStreamHandler(ctx, config, callbacks)}
 }
 

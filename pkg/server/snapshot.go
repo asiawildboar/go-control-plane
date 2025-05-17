@@ -1,45 +1,66 @@
-// Copyright 2018 Envoyproxy Authors
-//
-//   Licensed under the Apache License, Version 2.0 (the "License");
-//   you may not use this file except in compliance with the License.
-//   You may obtain a copy of the License at
-//
-//       http://www.apache.org/licenses/LICENSE-2.0
-//
-//   Unless required by applicable law or agreed to in writing, software
-//   distributed under the License is distributed on an "AS IS" BASIS,
-//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//   See the License for the specific language governing permissions and
-//   limitations under the License.
-
-package cache
+package xdsserver
 
 import (
 	"errors"
 	"fmt"
 
+	cluster "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
+	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	xdsservertypes "github.com/envoyproxy/go-control-plane/pkg/types"
 	"google.golang.org/protobuf/proto"
 )
 
+// Resources is a versioned group of resources.
+type Resources struct {
+	// Version information.
+	Version string
+
+	// Items in the group indexed by name.
+	Items map[string]proto.Message
+}
+
+// GetResourceName returns the resource name for a valid xDS response type.
+func GetResourceName(res proto.Message) string {
+	switch v := res.(type) {
+	case *listener.Listener:
+		return v.GetName()
+	case *cluster.Cluster:
+		return v.GetName()
+	default:
+		return ""
+	}
+}
+
+// IndexResourcesByName creates a map from the resource name to the resource.
+func IndexResourcesByName(items []proto.Message) map[string]proto.Message {
+	indexed := make(map[string]proto.Message, len(items))
+	for _, item := range items {
+		indexed[GetResourceName(item)] = item
+	}
+	return indexed
+}
+
+// NewResources creates a new resource group.
+func NewResources(version string, items []proto.Message) Resources {
+	return Resources{
+		Version: version,
+		Items:   IndexResourcesByName(items),
+	}
+}
+
 type Snapshot struct {
-	Resources [xdsservertypes.UnknownType]Resources
+	Resources map[string]Resources
 
 	VersionMap map[string]map[string]string
 }
 
 // NewSnapshot creates a snapshot from response types and a version.
 // The resources map is keyed off the type URL of a resource, followed by the slice of resource objects.
-func NewSnapshot(version string, resources map[xdsservertypes.Type][]proto.Message) (*Snapshot, error) {
+func NewSnapshot(version string, resources map[string][]proto.Message) (*Snapshot, error) {
 	out := Snapshot{}
 
 	for typ, resource := range resources {
-		index := GetResponseType(typ)
-		if index == xdsservertypes.UnknownType {
-			return nil, errors.New("unknown resource type: " + typ)
-		}
-
-		out.Resources[index] = NewResources(version, resource)
+		out.Resources[typ] = NewResources(version, resource)
 	}
 
 	fmt.Println("pog Snapshot resources:", out.Resources)
@@ -49,16 +70,12 @@ func NewSnapshot(version string, resources map[xdsservertypes.Type][]proto.Messa
 }
 
 // GetResources selects snapshot resources by type, returning the map of resources.
-func (s *Snapshot) GetResources(typeURL xdsservertypes.Type) map[string]Resource {
+func (s *Snapshot) GetResources(typeURL xdsservertypes.Type) map[string]proto.Message {
 	if s == nil {
 		return nil
 	}
-	typ := GetResponseType(typeURL)
-	if typ == xdsservertypes.UnknownType {
-		return nil
-	}
-	resources := s.Resources[typ].Items
-	withoutTTL := make(map[string]Resource, len(resources))
+	resources := s.Resources[typeURL].Items
+	withoutTTL := make(map[string]proto.Message, len(resources))
 
 	for k, v := range resources {
 		withoutTTL[k] = v
@@ -72,11 +89,7 @@ func (s *Snapshot) GetVersion(typeURL xdsservertypes.Type) string {
 	if s == nil {
 		return ""
 	}
-	typ := GetResponseType(typeURL)
-	if typ == xdsservertypes.UnknownType {
-		return ""
-	}
-	return s.Resources[typ].Version
+	return s.Resources[typeURL].Version
 }
 
 // GetVersionMap will return the internal version map of the currently applied snapshot.
@@ -97,22 +110,18 @@ func (s *Snapshot) ConstructVersionMap() error {
 
 	s.VersionMap = make(map[string]map[string]string)
 
-	for i, resources := range s.Resources {
-		typeURL, err := GetResponseTypeURL(xdsservertypes.ResponseType(i))
-		if err != nil {
-			return err
-		}
+	for typeURL, resources := range s.Resources {
 		if _, ok := s.VersionMap[typeURL]; !ok {
 			s.VersionMap[typeURL] = make(map[string]string, len(resources.Items))
 		}
 
 		for _, r := range resources.Items {
 			// Hash our version in here and build the version map.
-			marshaledResource, err := MarshalResource(r)
+			marshaledResource, err := xdsservertypes.MarshalResource(r)
 			if err != nil {
 				return err
 			}
-			v := HashResource(marshaledResource)
+			v := xdsservertypes.HashResource(marshaledResource)
 			if v == "" {
 				return fmt.Errorf("failed to build resource version: %w", err)
 			}

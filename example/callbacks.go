@@ -7,7 +7,7 @@ import (
 
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	"github.com/envoyproxy/go-control-plane/pkg/server"
+	xdsserver "github.com/envoyproxy/go-control-plane/pkg/server"
 )
 
 type Callbacks struct {
@@ -18,7 +18,7 @@ type Callbacks struct {
 	mu             sync.Mutex
 }
 
-var _ server.Callbacks = &Callbacks{}
+var _ xdsserver.Callbacks = &Callbacks{}
 
 func (cb *Callbacks) OnDeltaStreamOpen(_ context.Context, id int64, typ string) error {
 	if cb.Debug {
