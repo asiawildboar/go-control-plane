@@ -50,7 +50,7 @@ func notifySnapshot(c *xdsserver.ConfigWatcher) {
 	l.Debugf("[notifySnapshot] will serve snapshot %d", debugMsg)
 	debugMsg++
 	// Add the snapshot to the cache
-	if err := c.NotifySnapshot(snapshot); err != nil {
+	if err := c.SetSnapshotAndNotify(snapshot); err != nil {
 		l.Errorf("snapshot error %q for %+v", err, snapshot)
 		os.Exit(1)
 	}
