@@ -22,8 +22,8 @@ type XDSStore struct {
 type ConfigWatcher struct {
 	log log.Logger
 
-	streamData *StreamData
-	snapshot   *Snapshot
+	activeStreams map[int64]*StreamData
+	snapshot      *Snapshot
 
 	mu sync.RWMutex
 }
@@ -34,17 +34,26 @@ func NewConfigWatcher(logger log.Logger) *ConfigWatcher {
 	}
 
 	cw := &ConfigWatcher{
-		log: logger,
+		log:           logger,
+		activeStreams: make(map[int64]*StreamData),
 	}
 
 	return cw
 }
 
-func (cw *ConfigWatcher) SetStreamData(streamData *StreamData) {
+func (cw *ConfigWatcher) SetStreamData(streamID int64, streamData *StreamData) {
 	cw.mu.Lock()
 	defer cw.mu.Unlock()
 
-	cw.streamData = streamData
+	cw.activeStreams[streamID] = streamData
+}
+
+func (cw *ConfigWatcher) RemoveStreamData(streamID int64) {
+	cw.mu.Lock()
+	defer cw.mu.Unlock()
+	if _, ok := cw.activeStreams[streamID]; ok {
+		delete(cw.activeStreams, streamID)
+	}
 }
 
 func (cw *ConfigWatcher) NotifySnapshot(snapshot *Snapshot) error {
@@ -55,20 +64,20 @@ func (cw *ConfigWatcher) NotifySnapshot(snapshot *Snapshot) error {
 	cw.snapshot = snapshot
 	fmt.Println("[ConfigWatcher]-[notify]", "snapshot", snapshot)
 
-	if cw.streamData == nil {
+	if cw.activeStreams == nil {
 		cw.log.Debugf("no stream data found, not sending response")
 		return nil
 	}
 
-	fmt.Println("[ConfigWatcher]-[notify]", "stream state", cw.streamData.PerTypeSubscriptionState)
-
 	// If ADS is enabled we need to order response delta watches so we guarantee
 	// sending them in the correct order. But we care CDS and LDS only, no need
 	// to order it for now.
-	for _, state := range cw.streamData.PerTypeSubscriptionState {
-		err := cw.respondDelta(context.Background(), snapshot, state, cw.streamData.ResponseCh)
-		if err != nil {
-			return err
+	for _, stream := range cw.activeStreams {
+		for _, state := range stream.PerTypeSubscriptionState {
+			err := cw.respondDelta(context.Background(), snapshot, state, stream.ResponseCh)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

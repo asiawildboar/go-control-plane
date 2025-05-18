@@ -61,11 +61,11 @@ func (s *serverImpl) DeltaAggregatedResources(stream discovery.AggregatedDiscove
 }
 
 func (s *serverImpl) FetchSecrets(context.Context, *discovery.DiscoveryRequest) (*discovery.DiscoveryResponse, error) {
-	panic("support delta stream only.")
+	panic("[FetchSecrets] support delta stream only.")
 }
 
 func (s *serverImpl) StreamSecrets(stream secretservice.SecretDiscoveryService_StreamSecretsServer) error {
-	panic("support delta stream only.")
+	panic("[StreamSecrets] support delta stream only.")
 }
 
 func (s *serverImpl) DeltaSecrets(stream secretservice.SecretDiscoveryService_DeltaSecretsServer) error {

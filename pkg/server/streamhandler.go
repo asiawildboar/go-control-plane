@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"sync/atomic"
 
 	"google.golang.org/grpc/codes"
@@ -36,38 +35,33 @@ func newStreamHandler(ctx context.Context, cw *ConfigWatcher, callbacks Callback
 func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.DeltaDiscoveryRequest, defaultTypeURL string) error {
 	streamID := atomic.AddInt64(&s.streamCount, 1)
 
-	// streamNonce holds a unique nonce for req-resp pairs per xDS stream.
-	var streamNonce int64
-
 	streamdata := NewStreamData()
-	s.configWatcher.SetStreamData(streamdata)
+	s.configWatcher.SetStreamData(streamID, streamdata)
 
 	node := &core.Node{}
 
 	defer func() {
+		s.configWatcher.RemoveStreamData(streamID)
 		if s.callbacks != nil {
 			s.callbacks.OnDeltaStreamClosed(streamID, node)
 		}
 	}()
 
 	// sends a response, returns the new stream nonce
-	send := func(resp *DeltaResponseWrapper) (string, error) {
+	send := func(resp *DeltaResponseWrapper) (int64, error) {
 		if resp == nil {
-			return "", errors.New("missing response")
+			return 0, errors.New("missing response")
 		}
 
 		response, err := resp.GetDeltaDiscoveryResponse()
 		if err != nil {
-			return "", err
+			return 0, err
 		}
-
-		streamNonce++
-		response.Nonce = strconv.FormatInt(streamNonce, 10)
 		if s.callbacks != nil {
 			s.callbacks.OnStreamDeltaResponse(streamID, resp.DeltaRequest, response)
 		}
 
-		return response.GetNonce(), str.Send(response)
+		return resp.Nonce, str.Send(response)
 	}
 
 	// process a single delta response
@@ -76,9 +70,9 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 		if err != nil {
 			return err
 		}
-		streamdata.Nonce = nonce
 		perTypeSubscriptionState := streamdata.PerTypeSubscriptionState[resp.TypeURL]
 		perTypeSubscriptionState.SetResourceVersions(resp.VersionMap)
+		perTypeSubscriptionState.SetNonce(nonce)
 		return nil
 	}
 
@@ -134,6 +128,10 @@ func (s *streamHandler) processDelta(str DeltaStream, reqCh <-chan *discovery.De
 				if err := s.callbacks.OnStreamDeltaRequest(streamID, req); err != nil {
 					return err
 				}
+			}
+			if req.GetResponseNonce() != "" {
+				// TODO(yangson): check ack/nack
+				break
 			}
 
 			// The node information might only be set on the first incoming delta discovery request, so store it here so we can

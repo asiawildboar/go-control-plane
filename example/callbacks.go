@@ -21,8 +21,11 @@ type Callbacks struct {
 var _ xdsserver.Callbacks = &Callbacks{}
 
 func (cb *Callbacks) OnDeltaStreamOpen(_ context.Context, id int64, typ string) error {
+	if typ == "" {
+		typ = "ADS"
+	}
 	if cb.Debug {
-		log.Printf("[Callbacks]-[OnDeltaStreamOpen] delta stream %d open\n", id)
+		log.Printf("[Callbacks]-[OnDeltaStreamOpen] delta stream %d open, typ: %v\n", id, typ)
 	}
 	return nil
 }
@@ -45,7 +48,7 @@ func (cb *Callbacks) OnStreamDeltaResponse(id int64, req *discovery.DeltaDiscove
 }
 
 func (cb *Callbacks) OnStreamDeltaRequest(id int64, req *discovery.DeltaDiscoveryRequest) error {
-	log.Println("[Callbacks]-[OnStreamDeltaRequest]", req.GetTypeUrl(), "subscribe", req.GetResourceNamesSubscribe(), "unsubscribe", req.GetResourceNamesUnsubscribe(), "InitialResourceVersions", req.GetInitialResourceVersions(), "ResponseNonce", req.GetResponseNonce())
+	log.Println("[Callbacks]-[OnStreamDeltaRequest]", req.GetTypeUrl(), "subscribe", req.GetResourceNamesSubscribe(), "unsubscribe", req.GetResourceNamesUnsubscribe(), "InitialResourceVersions", req.GetInitialResourceVersions(), "is ack/nack", req.GetResponseNonce() != "")
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.DeltaRequests++

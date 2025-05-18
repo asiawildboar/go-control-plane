@@ -4,9 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"strconv"
 
 	cluster "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
+	tls "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
+
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -73,6 +76,8 @@ func GetResourceName(res proto.Message) string {
 		return v.GetName()
 	case *cluster.Cluster:
 		return v.GetName()
+	case *tls.Secret:
+		return v.GetName()
 	default:
 		return ""
 	}
@@ -110,6 +115,9 @@ type DeltaResponseWrapper struct {
 
 	// VersionMap consists of updated version mappings after this response is applied
 	VersionMap map[string]string
+
+	// nonce is the nonce to be used in the delta response.
+	Nonce int64
 }
 
 // groups together resource-related arguments for the createDeltaResponse function
@@ -175,6 +183,7 @@ func CreateDeltaResponse(state *ResourceSubscriptionState, resources resourceCon
 		RemovedResources:  toRemove,
 		VersionMap:        nextVersionMap,
 		SystemVersionInfo: resources.systemVersion,
+		Nonce:             state.GetNonce() + 1,
 	}, nil
 }
 
@@ -206,6 +215,7 @@ func (d *DeltaResponseWrapper) GetDeltaDiscoveryResponse() (*discovery.DeltaDisc
 		RemovedResources:  d.RemovedResources,
 		TypeUrl:           d.TypeURL,
 		SystemVersionInfo: d.SystemVersionInfo,
+		Nonce:             strconv.FormatInt(d.Nonce, 10),
 	}, nil
 }
 
@@ -228,6 +238,9 @@ type ResourceSubscriptionState struct {
 
 	// First indicates whether the StreamState has been modified since its creation
 	first bool
+
+	// The nonce is used to identify the response to a specific request
+	nonce int64
 }
 
 func NewResourceSubscriptionState(typeURL string, wildcard bool, initialResourceVersions map[string]string) *ResourceSubscriptionState {
@@ -237,11 +250,20 @@ func NewResourceSubscriptionState(typeURL string, wildcard bool, initialResource
 		subscribedResourceNames: map[string]struct{}{},
 		resourceVersions:        initialResourceVersions,
 		first:                   true,
+		nonce:                   0,
 	}
 	if initialResourceVersions == nil {
 		state.resourceVersions = make(map[string]string)
 	}
 	return &state
+}
+
+func (s *ResourceSubscriptionState) SetNonce(nonce int64) {
+	s.nonce = nonce
+}
+
+func (s *ResourceSubscriptionState) GetNonce() int64 {
+	return s.nonce
 }
 
 func (s *ResourceSubscriptionState) GetSubscribedResourceNames() map[string]struct{} {

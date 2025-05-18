@@ -125,7 +125,28 @@ func makeSecretValidationContext() *tls.Secret {
 		Type: &tls.Secret_ValidationContext{
 			ValidationContext: &tls.CertificateValidationContext{
 				TrustedCa: &core.DataSource{
-					Specifier: &core.DataSource_InlineString{InlineString: "fake-ca"},
+					Specifier: &core.DataSource_InlineString{
+						InlineString: `-----BEGIN CERTIFICATE-----
+MIIDSDCCAjACCQDqlMu+JcDpOjANBgkqhkiG9w0BAQsFADBmMQswCQYDVQQGEwJV
+UzETMBEGA1UECAwKQ2FsaWZvcm5pYTEWMBQGA1UEBwwNU2FuIEZyYW5jaXNjbzEU
+MBIGA1UECgwLRXhhbXBsZSBPcmcxFDASBgNVBAMMC2V4YW1wbGUuY29tMB4XDTI1
+MDUxODEyMDAyMFoXDTI2MDUxODEyMDAyMFowZjELMAkGA1UEBhMCVVMxEzARBgNV
+BAgMCkNhbGlmb3JuaWExFjAUBgNVBAcMDVNhbiBGcmFuY2lzY28xFDASBgNVBAoM
+C0V4YW1wbGUgT3JnMRQwEgYDVQQDDAtleGFtcGxlLmNvbTCCASIwDQYJKoZIhvcN
+AQEBBQADggEPADCCAQoCggEBAL6tjAr6FaxYYyLuvTEefrFOpkEYTf0kzPN4e80A
+aO322XDp9Z6koTIOsz62/aBSZr+99Zbvsy4wZy0mB/89B+5Ja8NV70IkbK/00vls
+fghXXuJwwSVF5syWdJs8cxPrR3QzqMvSNvD37CobDAYuJXSX4rey8CIXjflInvKD
+HEpbO5JHutz71A6zhxpYnWmum1Esjsq/ncxSAIgD6MqnmT+pHcLa93qDwERmvZKh
+RuxeYld/2oaRtAaMN86IT5i0tlH9YyaJCrVANss94GvJVHJgggdcNC9DiM9djfIJ
+VRVWegAV7H3J+tWEwsHPx+mg8fxodA95VGVMcThAFuaUrzcCAwEAATANBgkqhkiG
+9w0BAQsFAAOCAQEAafWj9kOyDVkKUpqv2pcfQu4tfLpOQI37XY7+AAp1QgvHwStC
+kCkasI8qPEV2xq0nJ7j8ChDAJ+rWETDG4IPVtSfqg1IAcOOQKqoBZAd0kdaJOqIQ
+wNJIbUegBpGQs9/JIiqwysy94Ahwf6aF2MI6v2c48k3Kicy0cbmlThhTeixoS0lV
+/kQxCZfcjbvFLLIc4WD4pZblbt9jSpfUGKTV5cj6E3yfgTG28Ef+tfCw3m2QnFxi
+QCUN0iXot/1mFyawHnnvkM5GFAAYkc9o7wyFyvKjGunmGnJjs8jUk7q6vLJvUdxQ
+if3AmbRGeNwtC7WOtpOMR5A2S7j7Y+4e+hkQWg==
+-----END CERTIFICATE-----`,
+					},
 				},
 			},
 		},
@@ -138,10 +159,60 @@ func makeSecretTlsCertificate() *tls.Secret {
 		Type: &tls.Secret_TlsCertificate{
 			TlsCertificate: &tls.TlsCertificate{
 				PrivateKey: &core.DataSource{
-					Specifier: &core.DataSource_InlineString{InlineString: "fake-private-key"},
+					Specifier: &core.DataSource_InlineString{
+						InlineString: `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC+rYwK+hWsWGMi
+7r0xHn6xTqZBGE39JMzzeHvNAGjt9tlw6fWepKEyDrM+tv2gUma/vfWW77MuMGct
+Jgf/PQfuSWvDVe9CJGyv9NL5bH4IV17icMElRebMlnSbPHMT60d0M6jL0jbw9+wq
+GwwGLiV0l+K3svAiF435SJ7ygxxKWzuSR7rc+9QOs4caWJ1prptRLI7Kv53MUgCI
+A+jKp5k/qR3C2vd6g8BEZr2SoUbsXmJXf9qGkbQGjDfOiE+YtLZR/WMmiQq1QDbL
+PeBryVRyYIIHXDQvQ4jPXY3yCVUVVnoAFex9yfrVhMLBz8fpoPH8aHQPeVRlTHE4
+QBbmlK83AgMBAAECggEBAKhUjU0jef6sCNjN6jdytGXTCPJugmr4EfbeZmyT8A4j
+3dHQuQVUUPngAF1dLopaNFsRV73n3kbodC1nZafuORIjvv6y3oWFom2ztIx9OsYi
+W6GL6Pb+vsHeERL6Sp1LF8l90YYeDmKse9CwD+1kz6weagfB8Dwojy2C7s8o79Cz
+MG9uVI9YuxaKog3P+2wTBe0A74xfMxLMQCBsOnyxbxXAdiQA9sSQ2isU+CpAIy1n
+bh9ZaRts2FH9sVu9vv8J5u5DVd5S3830Z/8bQuJ5tQ58Zy/agKGVsAfVQehT9zBC
+4zTAsKpxEXbrUYTTt+I1fCRod2KwHp56W1TNEJGTIAECgYEA++jnr6mxS2LxLiqV
+igdEiRQnYmHpliDrphn8aujnJwIJh5q6kKrUxUt3zc3miGytISwEu8zNF+pKMX2T
+naBj/gOwdJu9wDcy4FUs/cNzk9437OVW0rtDIUhnTV3qMKJaw1KZgp770mg1NOp3
+aBtQDvO1ST7egDzo/cXZm6n3+rkCgYEAwcYfvi8gSwKsAixs8kTmKyiZuD6Te9Zy
+ck2MwNDZdMHxqGcIftuLKbdPEFaar0nXFGWALhEs4F0Ck4NwC8EOANYK7mSqu58Y
+bSvbWr0Fyiu6L455RbfeD5vk71CgazoW0DOOp7J6ot6ZbaDPCy2MgThlc4tVKMQH
+ueSg732WQW8CgYEAjKfKHcJhVVeElSN/5dcTBHs1VnCXTZVKHq+pykQLNTOlAIt7
+mmVYcmUmGsrZ6tjLfpcmeXnsFmtiS+nzL3MsAdwrfaCsPZRUmv/UJEkq0qikj2iq
+pvWakQ3taDyFE+zDQwZu4olE0IIRG1/DlmSRuheH5MLu16mq6m+7hnhMFzkCgYBx
+jKwlQnBmBFbPn0DoZz+Jou0Rbnn2Y6AFIzSL+Na0+MGnsVjlHbna5DRMmrNibJ7A
+sQn/9MibYWWVE7yg5qxSCRu2vv7dm0kxEDYmYgX2htE/9PlTxX83Hl91bYXTz+J2
+dv/tfUUoE9FM0KMDJdnkDyxEHS32CYmNgVBdhvZ5uQKBgGY5cMuhtb7ToFwNkDE2
+P6oeTUuOs+lK59iJLc7exM05+8RQt5CcmkHv5nZfzq4q7dANABy+QZYw2OjAwdBB
+7IM847YlKgMJrfBnUru0ilx/B/HBiGKfOSdnhwvUKBhvE8tpcso6qe/5bM8c2/Kv
+bJegbkzHJMEvlf8tNAAdWnLp
+-----END PRIVATE KEY-----`,
+					},
 				},
 				CertificateChain: &core.DataSource{
-					Specifier: &core.DataSource_InlineString{InlineString: "fake-cert"},
+					Specifier: &core.DataSource_InlineString{
+						InlineString: `-----BEGIN CERTIFICATE-----
+MIIDSDCCAjACCQDqlMu+JcDpOjANBgkqhkiG9w0BAQsFADBmMQswCQYDVQQGEwJV
+UzETMBEGA1UECAwKQ2FsaWZvcm5pYTEWMBQGA1UEBwwNU2FuIEZyYW5jaXNjbzEU
+MBIGA1UECgwLRXhhbXBsZSBPcmcxFDASBgNVBAMMC2V4YW1wbGUuY29tMB4XDTI1
+MDUxODEyMDAyMFoXDTI2MDUxODEyMDAyMFowZjELMAkGA1UEBhMCVVMxEzARBgNV
+BAgMCkNhbGlmb3JuaWExFjAUBgNVBAcMDVNhbiBGcmFuY2lzY28xFDASBgNVBAoM
+C0V4YW1wbGUgT3JnMRQwEgYDVQQDDAtleGFtcGxlLmNvbTCCASIwDQYJKoZIhvcN
+AQEBBQADggEPADCCAQoCggEBAL6tjAr6FaxYYyLuvTEefrFOpkEYTf0kzPN4e80A
+aO322XDp9Z6koTIOsz62/aBSZr+99Zbvsy4wZy0mB/89B+5Ja8NV70IkbK/00vls
+fghXXuJwwSVF5syWdJs8cxPrR3QzqMvSNvD37CobDAYuJXSX4rey8CIXjflInvKD
+HEpbO5JHutz71A6zhxpYnWmum1Esjsq/ncxSAIgD6MqnmT+pHcLa93qDwERmvZKh
+RuxeYld/2oaRtAaMN86IT5i0tlH9YyaJCrVANss94GvJVHJgggdcNC9DiM9djfIJ
+VRVWegAV7H3J+tWEwsHPx+mg8fxodA95VGVMcThAFuaUrzcCAwEAATANBgkqhkiG
+9w0BAQsFAAOCAQEAafWj9kOyDVkKUpqv2pcfQu4tfLpOQI37XY7+AAp1QgvHwStC
+kCkasI8qPEV2xq0nJ7j8ChDAJ+rWETDG4IPVtSfqg1IAcOOQKqoBZAd0kdaJOqIQ
+wNJIbUegBpGQs9/JIiqwysy94Ahwf6aF2MI6v2c48k3Kicy0cbmlThhTeixoS0lV
+/kQxCZfcjbvFLLIc4WD4pZblbt9jSpfUGKTV5cj6E3yfgTG28Ef+tfCw3m2QnFxi
+QCUN0iXot/1mFyawHnnvkM5GFAAYkc9o7wyFyvKjGunmGnJjs8jUk7q6vLJvUdxQ
+if3AmbRGeNwtC7WOtpOMR5A2S7j7Y+4e+hkQWg==
+-----END CERTIFICATE-----`,
+					},
 				},
 			},
 		},
