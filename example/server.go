@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	discoverygrpc "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+	secretservice "github.com/envoyproxy/go-control-plane/envoy/service/secret/v3"
 	xdsserver "github.com/envoyproxy/go-control-plane/pkg/server"
 )
 
@@ -84,6 +85,7 @@ func (s *Server) Run(port uint) {
 func registerServer(grpcServer *grpc.Server, server xdsserver.XDSServer) {
 	// register services
 	discoverygrpc.RegisterAggregatedDiscoveryServiceServer(grpcServer, server)
+	secretservice.RegisterSecretDiscoveryServiceServer(grpcServer, server)
 }
 
 // RunServer starts an xDS server at the given port.
