@@ -51,9 +51,7 @@ func (cw *ConfigWatcher) SetStreamData(streamID int64, streamData *StreamData) {
 func (cw *ConfigWatcher) RemoveStreamData(streamID int64) {
 	cw.mu.Lock()
 	defer cw.mu.Unlock()
-	if _, ok := cw.activeStreams[streamID]; ok {
-		delete(cw.activeStreams, streamID)
-	}
+	delete(cw.activeStreams, streamID)
 }
 
 func (cw *ConfigWatcher) NotifySnapshot(snapshot *Snapshot) error {
