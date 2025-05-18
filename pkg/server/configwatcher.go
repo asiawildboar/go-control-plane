@@ -54,7 +54,7 @@ func (cw *ConfigWatcher) RemoveStreamData(streamID int64) {
 	delete(cw.activeStreams, streamID)
 }
 
-func (cw *ConfigWatcher) NotifySnapshot(snapshot *Snapshot) error {
+func (cw *ConfigWatcher) SetSnapshotAndNotify(snapshot *Snapshot) error {
 	cw.mu.Lock()
 	defer cw.mu.Unlock()
 
